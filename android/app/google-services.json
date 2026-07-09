@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "899200306188",
+    "project_id": "kanbly-39699",
+    "storage_bucket": "kanbly-39699.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:899200306188:android:341d734222d2889c75b229",
+        "android_client_info": {
+          "package_name": "uttec.com.kanbly"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDPghsiEv8C5CK4c2NQstOaxmZcUjquP1Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
