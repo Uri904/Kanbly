@@ -1,4 +1,4 @@
-package attlitecorp.com.kanbly
+package uttec.com.kanbly
 
 import io.flutter.embedding.android.FlutterActivity
 

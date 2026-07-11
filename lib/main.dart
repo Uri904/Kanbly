@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'Vistas/mis_tableros.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,7 +14,9 @@ class KanblyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Kanbly',
-      home: const Scaffold(body: Center(child: Text('Kanbly funcionando'))),
+      //home: const Scaffold(body: Center(child: Text('Kanbly funcionando'))),
+      home: const MisTableros(),
+
     );
   }
 }
