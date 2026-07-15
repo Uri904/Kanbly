@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'formulario_tablero.dart';
 import 'encabezado.dart';
 import 'menu_lateral.dart';
+import 'kanban_board_widget.dart';
 
 class MisTableros extends StatefulWidget {
   const MisTableros({super.key});
@@ -297,11 +298,10 @@ class _MisTablerosState extends State<MisTableros> {
 
   // Función encargada de gestionar la transición al tablero seleccionado
   void _abrirTableroCompleto(Map<String, dynamic> tablero) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Abriendo: ${tablero['titulo']}'),
-        duration: const Duration(seconds: 1),
-        backgroundColor: const Color(0xFF52ABEB),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const KanbanBoardWidget(),
       ),
     );
   }
