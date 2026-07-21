@@ -45,7 +45,11 @@ class AuthController extends ChangeNotifier {
 
       // Registrar en Firebase Auth
       print('🔐 [REGISTER] Creando usuario en Firebase Auth...');
-      final userCredential = await _authService.registerUser(email, password);
+      final userCredential = await _authService.registrarConEmailYPassword(
+        email,
+        password,
+        nombreCompleto,
+      );
       print('✅ [REGISTER] Usuario creado en Auth: ${userCredential.user!.uid}');
 
       // Crear usuario
@@ -115,7 +119,7 @@ class AuthController extends ChangeNotifier {
       final encryptedPassword = EncryptionService.encryptPassword(password);
 
       // Iniciar sesión en Firebase Auth
-      final userCredential = await _authService.loginUser(email, password);
+      final userCredential = await _authService.loginConEmailYPassword(email, password);
 
       // Obtener usuario de Firestore
       final usuario = await _firestoreService.obtenerUsuario(userCredential.user!.uid);
@@ -142,7 +146,7 @@ class AuthController extends ChangeNotifier {
   // Cerrar sesión
   Future<void> logout() async {
     try {
-      await _authService.logoutUser();
+      await _authService.logout();
       _usuarioActual = null;
       _setStatus(AuthStatus.unauthenticated);
     } catch (e) {

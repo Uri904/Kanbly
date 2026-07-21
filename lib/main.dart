@@ -10,9 +10,16 @@ import 'servicios/firestore_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } on FirebaseException catch (e) {
+    if (e.code != 'duplicate-app') {
+      rethrow;
+    }
+    // Si es duplicate-app, Firebase ya estaba inicializado nativamente, lo ignoramos
+  }
 
   // Activar App Check
   //await FirebaseAppCheck.instance.activate(
@@ -21,7 +28,7 @@ Future<void> main() async {
   //);
 
   final firestoreService = FirestoreService();
-  await firestoreService.crearColeccionUsuarios();
+  // await firestoreService.crearColeccionUsuarios();
 
 
   runApp(const MyApp());

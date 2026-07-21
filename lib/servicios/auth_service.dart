@@ -104,4 +104,21 @@ class AuthService {
         .snapshots()
         .map((doc) => doc.exists ? Usuario.fromMap(doc.id, doc.data()!) : null);
   }
+
+  // Enviar email de verificación
+  Future<void> sendVerificationEmail() async {
+    final user = _auth.currentUser;
+    if (user != null && !user.emailVerified) {
+      await user.sendEmailVerification();
+    }
+  }
+
+  // Enviar correo de restablecimiento de contraseña
+  Future<void> resetPassword(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+    } catch (e) {
+      throw Exception('Error al enviar correo de restablecimiento: $e');
+    }
+  }
 }
