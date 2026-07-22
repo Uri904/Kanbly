@@ -3,6 +3,9 @@ import 'formulario_tablero.dart';
 import 'encabezado.dart';
 import 'menu_lateral.dart';
 import 'kanban_board_widget.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../modelo/tablero.dart';
+import '../servicios/firestore_service.dart';
 
 class MisTableros extends StatefulWidget {
   const MisTableros({super.key});
@@ -14,10 +17,48 @@ class MisTableros extends StatefulWidget {
 class _MisTablerosState extends State<MisTableros> {
   // 1. DECLARACIÓN DE LA CLAVE GLOBAL:
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-
+  final FirestoreService _firestoreService = FirestoreService();
+  List<Tablero> _tableros = [];
+  bool _cargando = true;
   // Control de la pestaña activa: 0 = General, 1 = Individual, 2 = Equipo
   int _tabActiva = 0;
+  Future<void> _cargarTableros() async {
 
+    try {
+
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+
+      final tableros =
+      await _firestoreService.obtenerTablerosDeUsuario(uid);
+
+      setState(() {
+        _tableros = tableros;
+        _cargando = false;
+      });
+
+    } catch (e) {
+
+      print("ERROR REAL TABLEROS: $e");
+
+      setState(() {
+        _cargando = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+         SnackBar(
+          content: Text("$e"),
+        ),
+      );
+
+    }
+
+  }
+  @override
+  void initState() {
+    super.initState();
+
+    _cargarTableros();
+  }
   @override
   Widget build(BuildContext context) {
     // Colores oficiales basados estrictamente en tu paleta
@@ -160,45 +201,42 @@ class _MisTablerosState extends State<MisTableros> {
 
   // Genera la cuadrícula con los 2 tableros de ejemplo
   Widget _construirCuadriculaTableros() {
-    final List<Map<String, dynamic>> tablerosEjemplo = [
-      {
-        'titulo': 'Proyecto Beta: Lanzamiento Q3',
-        'esGrupal': true,
-        'por_hacer': 8,
-        'en_progreso': 5,
-        'hecho': 9,
-      },
-      {
-        'titulo': 'Tareas Personales',
-        'esGrupal': false,
-        'por_hacer': 2,
-        'en_progreso': 1,
-        'hecho': 6,
-      },
-    ];
-
-    return GridView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+    if (_cargando) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+    if (_tableros.isEmpty) {
+      return const Center(
+        child: Text("No tienes tableros creados"),
+      );
+    }
+    return RefreshIndicator(
+        onRefresh: _cargarTableros,
+        child: GridView.builder(      padding: const EdgeInsets.symmetric(horizontal: 16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
         childAspectRatio: 0.85,
       ),
-      itemCount: tablerosEjemplo.length,
+      itemCount: _tableros.length,
       itemBuilder: (context, index) {
-        return _crearTarjetaTablero(tablerosEjemplo[index]);
+        return _crearTarjetaTablero(_tableros[index]);
       },
+        ),
     );
   }
 
   // Maqueta el diseño visual de cada tarjeta individual
-  Widget _crearTarjetaTablero(Map<String, dynamic> datos) {
-    final Color colorTipo = datos['esGrupal'] ? const Color(0xFF52ABEB) : const Color(0xFF63D0A1);
-
+  Widget _crearTarjetaTablero(Tablero tablero) {
+    final Color colorTipo =
+    tablero.esGrupal
+        ? const Color(0xFF52ABEB)
+        : const Color(0xFF63D0A1);
     return GestureDetector(
       onTap: () {
-        _abrirTableroCompleto(datos);
+        _abrirTableroCompleto(tablero);
       },
       child: Container(
         decoration: BoxDecoration(
@@ -222,24 +260,69 @@ class _MisTablerosState extends State<MisTableros> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      datos['titulo'],
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF1E293B),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
+                    Row(
+                      children: [
+
+                        Expanded(
+                          child: Text(
+                            tablero.nombre,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFF1E293B),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+
+                        PopupMenuButton<String>(
+                          icon: const Icon(
+                            Icons.more_vert,
+                            color: Colors.grey,
+                            size: 20,
+                          ),
+
+                          onSelected: (valor) {
+
+                            if (valor == 'editar') {
+                              _editarTablero(tablero);
+                            }
+
+                            if (valor == 'eliminar') {
+                              _confirmarEliminar(tablero);
+                            }
+
+                          },
+
+                          itemBuilder: (context) => [
+
+                            const PopupMenuItem(
+                              value: 'editar',
+                              child: Text('Editar'),
+                            ),
+
+                            const PopupMenuItem(
+                              value: 'eliminar',
+                              child: Text(
+                                'Eliminar',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ),
+
+                          ],
+                        ),
+
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      datos['esGrupal'] ? 'Equipo' : 'Individual',
+                      tablero.esGrupal? 'Equipo' : 'Individual',
                       style: const TextStyle(color: Colors.grey, fontSize: 11),
                     ),
                     const Spacer(),
                     Icon(
-                      datos['esGrupal'] ? Icons.groups_rounded : Icons.person_outline_rounded,
+                      tablero.esGrupal ? Icons.groups_rounded : Icons.person_outline_rounded,
                       color: colorTipo,
                       size: 20,
                     ),
@@ -259,9 +342,9 @@ class _MisTablerosState extends State<MisTableros> {
               ),
               child: Row(
                 children: [
-                  _crearBloqueEstado(valor: datos['por_hacer'], etiqueta: 'Por hacer', fondo: const Color(0xFF1E293B)),
-                  _crearBloqueEstado(valor: datos['en_progreso'], etiqueta: 'En progreso', fondo: const Color(0xFF63B09C)),
-                  _crearBloqueEstado(valor: datos['hecho'], etiqueta: 'Hecho', fondo: const Color(0xFF63D0A1), ultimo: true),
+                  _crearBloqueEstado(valor: 0, etiqueta: 'Por hacer', fondo: const Color(0xFF1E293B)),
+                  _crearBloqueEstado(valor: 0, etiqueta: 'En progreso', fondo: const Color(0xFF63B09C)),
+                  _crearBloqueEstado(valor: 0, etiqueta: 'Hecho', fondo: const Color(0xFF63D0A1), ultimo: true),
                 ],
               ),
             ),
@@ -297,7 +380,7 @@ class _MisTablerosState extends State<MisTableros> {
   }
 
   // Función encargada de gestionar la transición al tablero seleccionado
-  void _abrirTableroCompleto(Map<String, dynamic> tablero) {
+  void _abrirTableroCompleto(Tablero tablero) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -377,14 +460,79 @@ class _MisTablerosState extends State<MisTableros> {
 
   // Simulación de navegación hacia el formulario
   // Navegación real hacia el formulario unificado pasando el parámetro correspondiente
-  void _redirigirAFormulario({required bool esGrupal}) {
-    // Es buena práctica usar Navigator.push para transiciones de pantalla
-    Navigator.push(
+  void _redirigirAFormulario({required bool esGrupal}) async {
+
+    final creado = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => FormularioTablero(esGrupal: esGrupal),
       ),
     );
+
+      _cargarTableros();
+
+  }
+  Future<void> _confirmarEliminar(Tablero tablero) async {
+
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+
+        return AlertDialog(
+          title: const Text("Eliminar tablero"),
+          content: Text(
+              "¿Seguro que deseas eliminar '${tablero.nombre}'?"
+          ),
+
+          actions: [
+
+            TextButton(
+              onPressed: (){
+                Navigator.pop(context, false);
+              },
+              child: const Text("Cancelar"),
+            ),
+
+            TextButton(
+              onPressed: (){
+                Navigator.pop(context, true);
+              },
+              child: const Text(
+                "Eliminar",
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+
+          ],
+        );
+
+      },
+    );
+
+
+    if(confirmar == true){
+
+      await _firestoreService.eliminarTablero(tablero.id);
+
+      _cargarTableros();
+
+    }
+
+  }
+  void _editarTablero(Tablero tablero) async {
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FormularioTablero(
+          esGrupal: tablero.esGrupal,
+          tablero: tablero,
+        ),
+      ),
+    );
+
+    _cargarTableros();
+
   }
   /* Si eligió Individual:
   Navigator.push(

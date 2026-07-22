@@ -52,7 +52,6 @@ class FirestoreService {
   }
 
   // ========== TABLEROS ==========
-
   Future<String> crearTablero(Tablero tablero) async {
     try {
       final docRef = await _firestore.collection('tableros').add(tablero.toMap());
@@ -71,17 +70,60 @@ class FirestoreService {
 
   Future<void> crearTableroConId(Tablero tablero) async {
     try {
-      await _firestore.collection('tableros').doc(tablero.id).set(tablero.toMap());
 
-      final usuarioRef = _firestore.collection('usuarios').doc(tablero.creadorId);
-      await usuarioRef.update({
-        'tablerosIds': FieldValue.arrayUnion([tablero.id])
-      });
+      // Crear tablero
+      await _firestore
+          .collection('tableros')
+          .doc(tablero.id)
+          .set(tablero.toMap());
+
+
+      // Agregar tablero al usuario
+      final usuarioRef =
+      _firestore.collection('usuarios').doc(tablero.creadorId);
+
+      await usuarioRef.set(
+        {
+          'tablerosIds': FieldValue.arrayUnion([tablero.id])
+        },
+        SetOptions(merge: true),
+      );
+
+
     } catch (e) {
       throw Exception('Error al crear tablero: $e');
     }
   }
+  Future<List<Usuario>> buscarUsuarios(String texto) async {
 
+    final snapshot = await _firestore
+        .collection('usuarios')
+        .where('email', isGreaterThanOrEqualTo: texto)
+        .where('email', isLessThanOrEqualTo: '$texto\uf8ff')
+        .get();
+
+    return snapshot.docs
+        .map((doc) => Usuario.fromMap(doc.id, doc.data()))
+        .toList();
+  }
+  Future<Usuario?> obtenerUsuarioPorId(String id) async {
+
+    final doc = await _firestore
+        .collection('usuarios')
+        .doc(id)
+        .get();
+
+    if(doc.exists){
+
+      return Usuario.fromMap(
+        doc.id,
+        doc.data()!,
+      );
+
+    }
+
+    return null;
+  }
   Future<List<Tablero>> obtenerTablerosDeUsuario(String userId) async {
     try {
       final querySnapshot = await _firestore

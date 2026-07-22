@@ -4,18 +4,33 @@ class Tablero {
   final String id;
   final String nombre;
   final String? descripcion;
+
+  /// Indica si el tablero es individual o grupal
+  final bool esGrupal;
+
+  /// Usuario que creó el tablero
   final String creadorId;
+
+  /// Integrantes del tablero (vacío si es individual)
   final List<String> miembrosIds;
+
   final DateTime fechaCreacion;
   final DateTime? fechaActualizacion;
-  final String? color;
-  final bool activo;
-  final Map<String, dynamic>? configuracion; // Para configuración extra
 
-  Tablero({
+  /// Color opcional del tablero
+  final String? color;
+
+  /// Permite ocultar/desactivar tableros sin eliminarlos
+  final bool activo;
+
+  /// Configuración adicional
+  final Map<String, dynamic>? configuracion;
+
+  const Tablero({
     required this.id,
     required this.nombre,
     this.descripcion,
+    required this.esGrupal,
     required this.creadorId,
     this.miembrosIds = const [],
     required this.fechaCreacion,
@@ -28,15 +43,20 @@ class Tablero {
   factory Tablero.fromMap(String id, Map<String, dynamic> map) {
     return Tablero(
       id: id,
-      nombre: map['nombre'] ?? 'Tablero sin nombre',
+      nombre: map['nombre'] ?? '',
       descripcion: map['descripcion'],
+      esGrupal: map['esGrupal'] ?? false,
       creadorId: map['creadorId'] ?? '',
       miembrosIds: List<String>.from(map['miembrosIds'] ?? []),
-      fechaCreacion: (map['fechaCreacion'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      fechaActualizacion: (map['fechaActualizacion'] as Timestamp?)?.toDate(),
+      fechaCreacion:
+      (map['fechaCreacion'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      fechaActualizacion:
+      (map['fechaActualizacion'] as Timestamp?)?.toDate(),
       color: map['color'],
       activo: map['activo'] ?? true,
-      configuracion: map['configuracion'],
+      configuracion: map['configuracion'] != null
+          ? Map<String, dynamic>.from(map['configuracion'])
+          : null,
     );
   }
 
@@ -44,6 +64,7 @@ class Tablero {
     return {
       'nombre': nombre,
       'descripcion': descripcion,
+      'esGrupal': esGrupal,
       'creadorId': creadorId,
       'miembrosIds': miembrosIds,
       'fechaCreacion': Timestamp.fromDate(fechaCreacion),
@@ -60,6 +81,7 @@ class Tablero {
     String? id,
     String? nombre,
     String? descripcion,
+    bool? esGrupal,
     String? creadorId,
     List<String>? miembrosIds,
     DateTime? fechaCreacion,
@@ -72,6 +94,7 @@ class Tablero {
       id: id ?? this.id,
       nombre: nombre ?? this.nombre,
       descripcion: descripcion ?? this.descripcion,
+      esGrupal: esGrupal ?? this.esGrupal,
       creadorId: creadorId ?? this.creadorId,
       miembrosIds: miembrosIds ?? this.miembrosIds,
       fechaCreacion: fechaCreacion ?? this.fechaCreacion,

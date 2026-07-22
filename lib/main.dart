@@ -6,6 +6,7 @@ import 'controlador/auth_controller.dart';
 import 'Vistas/login_view.dart';
 import 'firebase_options.dart';
 import 'servicios/firestore_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,6 +15,7 @@ Future<void> main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+
   } on FirebaseException catch (e) {
     if (e.code != 'duplicate-app') {
       rethrow;
@@ -48,6 +50,7 @@ class MyApp extends StatelessWidget {
           scaffoldBackgroundColor: const Color(0xFFFCFDFD),
           fontFamily: 'Roboto',
         ),
+
         home: const LoginView(),
         debugShowCheckedModeBanner: false,
       ),

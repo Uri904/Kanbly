@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
+import '../servicios/firestore_service.dart';
+import '../modelo/tablero.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../modelo/usuario.dart';
 
 class FormularioTablero extends StatefulWidget {
   final bool esGrupal;
+  final Tablero? tablero;
 
-  const FormularioTablero({super.key, required this.esGrupal});
+
+  const FormularioTablero({super.key, required this.esGrupal, this.tablero,
+  });
 
   @override
   State<FormularioTablero> createState() => _FormularioTableroState();
@@ -13,6 +21,10 @@ class _FormularioTableroState extends State<FormularioTablero> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _nombreController = TextEditingController();
   final TextEditingController _descripcionController = TextEditingController();
+  final FirestoreService _firestoreService = FirestoreService();
+  final TextEditingController _buscarController = TextEditingController();
+  List<Usuario> _miembrosSeleccionados = [];
+  String _fechaActualizacion = 'Sin actualizar';
 
   // Colores (se definen sin const para permitir el uso de .withOpacity)
   Color blanco = const Color(0xFFFCFDFD);
@@ -25,9 +37,30 @@ class _FormularioTableroState extends State<FormularioTablero> {
   void dispose() {
     _nombreController.dispose();
     _descripcionController.dispose();
+    _buscarController.dispose();
     super.dispose();
   }
+  @override
+  void initState() {
+    super.initState();
 
+    if (widget.tablero != null) {
+
+      _nombreController.text = widget.tablero!.nombre;
+
+      _descripcionController.text =
+          widget.tablero!.descripcion ?? "";
+
+      if (widget.tablero!.fechaActualizacion != null) {
+        _fechaActualizacion =
+            widget.tablero!.fechaActualizacion!
+                .toString()
+                .substring(0, 16);
+      }
+
+      _cargarMiembros();
+    }
+  }
   @override
   Widget build(BuildContext context) {
     final Color colorTema = widget.esGrupal ? azulCielo : verdeTurquesa;
@@ -39,7 +72,11 @@ class _FormularioTableroState extends State<FormularioTablero> {
         elevation: 0,
         iconTheme: IconThemeData(color: colorTema),
         title: Text(
-          widget.esGrupal ? 'Nuevo Tablero Grupal' : 'Nuevo Tablero Individual',
+            widget.tablero != null
+                ? 'Editar Tablero'
+                : widget.esGrupal
+                ? 'Nuevo Tablero Grupal'
+                : 'Nuevo Tablero Individual',
           style: TextStyle(color: grisOscuro, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         centerTitle: true,
@@ -96,7 +133,7 @@ class _FormularioTableroState extends State<FormularioTablero> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: TextFormField(
-                    initialValue: 'Sin actualizar',
+                    initialValue:  _fechaActualizacion,
                     readOnly: true,
                     enabled: false,
                     decoration: _construirDecoracionInput(pista: '', icono: Icons.update_rounded, colorFoco: colorTema).copyWith(labelText: 'Actualizado'),
@@ -113,7 +150,7 @@ class _FormularioTableroState extends State<FormularioTablero> {
                 children: [
                   const Text('Miembros del Equipo', style: TextStyle(color: Color(0xFF1E293B), fontWeight: FontWeight.bold, fontSize: 14)),
                   TextButton.icon(
-                    onPressed: null, // Botón deshabilitado
+                    onPressed: _agregarMiembro,
                     icon: const Icon(Icons.add, size: 18),
                     label: const Text('Añadir'),
                   ),
@@ -121,8 +158,46 @@ class _FormularioTableroState extends State<FormularioTablero> {
               ),
               Container(
                 constraints: const BoxConstraints(minHeight: 60),
-                decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
-                child: const Center(child: Text('No hay miembros añadidos aún.', style: TextStyle(color: Colors.grey, fontSize: 12))),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: _miembrosSeleccionados.isEmpty
+                    ? const Center(
+                  child: Text(
+                    'No hay miembros añadidos aún.',
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                )
+                    : ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _miembrosSeleccionados.length,
+                  itemBuilder: (context, index) {
+                    final usuario = _miembrosSeleccionados[index];
+
+                    return ListTile(
+                      leading: const Icon(Icons.person),
+                      title: Text(usuario.nombreCompleto),
+                      subtitle: Text(usuario.email),
+
+                      trailing: IconButton(
+                        icon: const Icon(
+                          Icons.remove_circle_outline,
+                          color: Colors.red,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _miembrosSeleccionados.removeWhere(
+                                  (u) => u.id == usuario.id,
+                            );
+                          });
+                        },
+                      ),
+                    );
+                  },
+                ),
               ),
               const SizedBox(height: 32),
             ],
@@ -131,9 +206,26 @@ class _FormularioTableroState extends State<FormularioTablero> {
             SizedBox(
               height: 50,
               child: ElevatedButton(
-                onPressed: _guardarTablero,
-                style: ElevatedButton.styleFrom(backgroundColor: colorTema, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                child: const Text('Crear Tablero', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                onPressed: widget.esGrupal && _miembrosSeleccionados.isEmpty
+                    ? null
+                    : _guardarTablero,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colorTema,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Text(
+                  widget.tablero != null
+                      ? 'Guardar Cambios'
+                      : 'Crear Tablero',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
               ),
             ),
           ],
@@ -155,9 +247,136 @@ class _FormularioTableroState extends State<FormularioTablero> {
     );
   }
 
-  void _guardarTablero() {
+  Future<void> _guardarTablero() async {
     if (_formKey.currentState!.validate()) {
-      Navigator.pop(context);
+
+      try {
+
+        final uid = FirebaseAuth.instance.currentUser!.uid;
+
+        final doc = FirebaseFirestore.instance
+            .collection('tableros')
+            .doc();
+
+        final tablero = Tablero(
+          id: widget.tablero?.id ?? doc.id,
+          nombre: _nombreController.text.trim(),
+          descripcion: _descripcionController.text.trim(),
+          esGrupal: widget.esGrupal,
+          creadorId: widget.tablero?.creadorId ?? uid,
+
+          miembrosIds: widget.tablero != null
+              ? _miembrosSeleccionados.map((u) => u.id).toList()
+              : [uid, ..._miembrosSeleccionados.map((u) => u.id)],
+
+          fechaCreacion: widget.tablero?.fechaCreacion ?? DateTime.now(),
+
+          fechaActualizacion: widget.tablero != null
+              ? DateTime.now()
+              : null,
+        );
+
+        print("PASO 1: antes de guardar");
+
+        if (widget.tablero == null) {
+
+          await _firestoreService.crearTableroConId(tablero);
+
+        } else {
+
+          await _firestoreService.actualizarTablero(tablero);
+
+        }
+        print("PASO 2: después de guardar");
+
+        if (!mounted) return;
+
+        print("PASO 3: antes de regresar");
+
+        Navigator.of(context).pop(true);
+
+        print("PASO 4: después de regresar");
+
+      } catch (e) {
+
+        print("ERROR: $e");
+
+      }
     }
+  }
+  Future<void> _agregarMiembro() async {
+
+    final usuarios = await _firestoreService.buscarUsuarios("");
+
+    showDialog(
+      context: context,
+      builder: (context) {
+
+        return AlertDialog(
+          title: const Text("Agregar miembro"),
+
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 300,
+
+            child: ListView.builder(
+              itemCount: usuarios.length,
+              itemBuilder: (context, index) {
+
+                final usuario = usuarios[index];
+
+                return ListTile(
+                  title: Text(usuario.nombreCompleto),
+                  subtitle: Text(usuario.email),
+
+                  trailing: IconButton(
+                    icon: const Icon(Icons.person_add),
+
+                    onPressed: () {
+
+                      setState(() {
+
+                        if (!_miembrosSeleccionados.any((u) => u.id == usuario.id)) {
+                          _miembrosSeleccionados.add(usuario);
+                        }
+
+                      });
+
+                      Navigator.pop(context);
+
+                    },
+                  ),
+                );
+
+              },
+            ),
+          ),
+        );
+
+      },
+    );
+
+  }
+  Future<void> _cargarMiembros() async {
+
+    final ids = widget.tablero!.miembrosIds;
+
+    List<Usuario> usuarios = [];
+
+    for (String id in ids) {
+
+      final usuario =
+      await _firestoreService.obtenerUsuarioPorId(id);
+
+      if(usuario != null){
+        usuarios.add(usuario);
+      }
+
+    }
+
+    setState(() {
+      _miembrosSeleccionados = usuarios;
+    });
+
   }
 }
