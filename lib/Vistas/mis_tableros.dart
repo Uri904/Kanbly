@@ -6,6 +6,7 @@ import 'kanban_board_widget.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../modelo/tablero.dart';
 import '../servicios/firestore_service.dart';
+import '../modelo/tarea.dart';
 
 class MisTableros extends StatefulWidget {
   const MisTableros({super.key});
@@ -330,6 +331,7 @@ class _MisTablerosState extends State<MisTableros> {
                 ),
               ),
             ),
+            // --- PIE DE TARJETA CON CONTADORES DINÁMICOS EN TIEMPO REAL ---
             Container(
               height: 36,
               decoration: BoxDecoration(
@@ -340,12 +342,25 @@ class _MisTablerosState extends State<MisTableros> {
                 ),
                 border: Border(top: BorderSide(color: Colors.grey.shade200)),
               ),
-              child: Row(
-                children: [
-                  _crearBloqueEstado(valor: 0, etiqueta: 'Por hacer', fondo: const Color(0xFF1E293B)),
-                  _crearBloqueEstado(valor: 0, etiqueta: 'En progreso', fondo: const Color(0xFF63B09C)),
-                  _crearBloqueEstado(valor: 0, etiqueta: 'Hecho', fondo: const Color(0xFF63D0A1), ultimo: true),
-                ],
+              // Conectamos al stream de tareas de este tablero específico
+              child: StreamBuilder<List<Tarea>>(
+                stream: _firestoreService.streamTareasDeTablero(tablero.id),
+                builder: (context, snapshot) {
+                  final tareas = snapshot.data ?? [];
+
+                  // Contamos cuántas tareas hay en cada columna
+                  final porHacer = tareas.where((t) => t.estado == EstadoTarea.pendiente).length;
+                  final enProgreso = tareas.where((t) => t.estado == EstadoTarea.enProgreso).length;
+                  final hecho = tareas.where((t) => t.estado == EstadoTarea.completada).length;
+
+                  return Row(
+                    children: [
+                      _crearBloqueEstado(valor: porHacer, etiqueta: 'Por hacer', fondo: const Color(0xFF1E293B)),
+                      _crearBloqueEstado(valor: enProgreso, etiqueta: 'En progreso', fondo: const Color(0xFF63B09C)),
+                      _crearBloqueEstado(valor: hecho, etiqueta: 'Hecho', fondo: const Color(0xFF63D0A1), ultimo: true),
+                    ],
+                  );
+                },
               ),
             ),
           ],
@@ -379,16 +394,16 @@ class _MisTablerosState extends State<MisTableros> {
     );
   }
 
-  // Función encargada de gestionar la transición al tablero seleccionado
-  void _abrirTableroCompleto(Tablero tablero) {
-    Navigator.push(
+// Función encargada de gestionar la transición al tablero seleccionado
+  void _abrirTableroCompleto(Tablero tablero) async {
+    await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const KanbanBoardWidget(),
+        builder: (context) => KanbanBoardWidget(tablero: tablero),
       ),
     );
+    _cargarTableros(); // Recargamos por si hubo cambios en los nombres al volver
   }
-
   // Muestra el menú inferior para elegir si el tablero será Individual o en Equipo
   void _mostrarOpcionesCreacion(BuildContext context) {
     showModalBottomSheet(
