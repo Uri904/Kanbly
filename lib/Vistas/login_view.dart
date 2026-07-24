@@ -18,7 +18,7 @@ class _LoginViewState extends State<LoginView> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
 
-  // ✅ COLORES DE KANBLY
+  // ✅ COLORES OFICIALES DE KANBLY
   static const Color azulCielo = Color(0xFF52ABEB);
   static const Color azulClaro = Color(0xFF37B5F4);
   static const Color verdeTurquesa = Color(0xFF63D0A1);
@@ -73,8 +73,8 @@ class _LoginViewState extends State<LoginView> {
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) {
                             return Container(
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
                                   colors: [azulCielo, verdeTurquesa],
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
@@ -134,25 +134,25 @@ class _LoginViewState extends State<LoginView> {
                       controller: _emailController,
                       decoration: InputDecoration(
                         labelText: 'Correo institucional',
-                        labelStyle: TextStyle(
+                        labelStyle: const TextStyle(
                           color: grisOscuro,
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                         ),
                         hintText: 'ejemplo@e.uttecamac.edu.mx',
                         hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
-                        prefixIcon: Icon(Icons.email_outlined, color: verdeTurquesa, size: 20),
+                        prefixIcon: const Icon(Icons.email_outlined, color: verdeTurquesa, size: 20),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: verdeTurquesa.withOpacity(0.5)!),
+                          borderSide: BorderSide(color: verdeTurquesa.withOpacity(0.5)),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: verdeTurquesa.withOpacity(0.3)!),
+                          borderSide: BorderSide(color: verdeTurquesa.withOpacity(0.3)),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: verdeTurquesa, width: 2),
+                          borderSide: const BorderSide(color: verdeTurquesa, width: 2),
                         ),
                         filled: true,
                         fillColor: blanco,
@@ -170,12 +170,12 @@ class _LoginViewState extends State<LoginView> {
                       obscureText: _obscurePassword,
                       decoration: InputDecoration(
                         labelText: 'Contraseña',
-                        labelStyle: TextStyle(
+                        labelStyle: const TextStyle(
                           color: grisOscuro,
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                         ),
-                        prefixIcon: Icon(Icons.lock_outline, color: verdeTurquesa, size: 20),
+                        prefixIcon: const Icon(Icons.lock_outline, color: verdeTurquesa, size: 20),
                         suffixIcon: IconButton(
                           icon: Icon(
                             _obscurePassword ? Icons.visibility_off : Icons.visibility,
@@ -190,15 +190,15 @@ class _LoginViewState extends State<LoginView> {
                         ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: verdeTurquesa.withOpacity(0.5)!),
+                          borderSide: BorderSide(color: verdeTurquesa.withOpacity(0.5)),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: verdeTurquesa.withOpacity(0.3)!),
+                          borderSide: BorderSide(color: verdeTurquesa.withOpacity(0.3)),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: verdeTurquesa, width: 2),
+                          borderSide: const BorderSide(color: verdeTurquesa, width: 2),
                         ),
                         filled: true,
                         fillColor: blanco,
@@ -219,7 +219,7 @@ class _LoginViewState extends State<LoginView> {
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        child: Text(
+                        child: const Text(
                           '¿Olvidaste tu contraseña?',
                           style: TextStyle(
                             color: verdeTurquesa,
@@ -231,7 +231,7 @@ class _LoginViewState extends State<LoginView> {
                     ),
                     const SizedBox(height: 16),
 
-                    // ✅ ERROR MESSAGE
+                    // ✅ MENSAJE DE ERROR
                     if (authController.errorMessage != null)
                       Container(
                         padding: const EdgeInsets.all(10),
@@ -310,7 +310,7 @@ class _LoginViewState extends State<LoginView> {
                             minimumSize: Size.zero,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
-                          child: Text(
+                          child: const Text(
                             'Regístrate',
                             style: TextStyle(
                               color: verdeTurquesa,
@@ -329,9 +329,9 @@ class _LoginViewState extends State<LoginView> {
                       decoration: BoxDecoration(
                         color: blanco,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: verdeAgua.withOpacity(0.3)!),
+                        border: Border.all(color: verdeAgua.withOpacity(0.3)),
                       ),
-                      child: Text(
+                      child: const Text(
                         'Solo correos institucionales @e.uttecamac.edu.mx',
                         style: TextStyle(
                           fontSize: 11,
@@ -360,6 +360,7 @@ class _LoginViewState extends State<LoginView> {
     }
   }
 
+  // ✅ DIÁLOGO CORREGIDO: SE ENVOLVIÓ EL CONTENIDO EN UN FORM CON formKey
   void _showResetPasswordDialog(BuildContext context) {
     final emailController = TextEditingController();
     final formKey = GlobalKey<FormState>();
@@ -368,41 +369,44 @@ class _LoginViewState extends State<LoginView> {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
+        title: const Row(
           children: [
             Icon(Icons.lock_reset, color: verdeTurquesa, size: 24),
-            const SizedBox(width: 10),
-            const Text(
+            SizedBox(width: 10),
+            Text(
               'Restablecer Contraseña',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Ingresa tu correo institucional para recibir un enlace de recuperación',
-              style: TextStyle(fontSize: 14),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: emailController,
-              decoration: InputDecoration(
-                labelText: 'Correo institucional',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: verdeTurquesa.withOpacity(0.5)!),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: verdeTurquesa, width: 2),
-                ),
+        content: Form(
+          key: formKey, // <-- ¡Aquí quedó vinculada la llave de validación!
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Ingresa tu correo institucional para recibir un enlace de recuperación',
+                style: TextStyle(fontSize: 14),
               ),
-              validator: Validators.validateInstitutionalEmail,
-              keyboardType: TextInputType.emailAddress,
-            ),
-          ],
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: emailController,
+                decoration: InputDecoration(
+                  labelText: 'Correo institucional',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: verdeTurquesa.withOpacity(0.5)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: verdeTurquesa, width: 2),
+                  ),
+                ),
+                validator: Validators.validateInstitutionalEmail,
+                keyboardType: TextInputType.emailAddress,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -414,7 +418,7 @@ class _LoginViewState extends State<LoginView> {
               if (formKey.currentState?.validate() ?? false) {
                 final authController = Provider.of<AuthController>(context, listen: false);
                 final success = await authController.resetPassword(emailController.text);
-                if (success) {
+                if (success && context.mounted) {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
