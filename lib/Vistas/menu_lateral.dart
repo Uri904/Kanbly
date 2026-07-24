@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
+import '../controlador/auth_controller.dart';
 import 'mis_tableros.dart';
 import 'login_view.dart';
 
@@ -111,11 +113,11 @@ class MenuLateral extends StatelessWidget {
     );
   }
 
-  // Cuadro de diálogo para confirmar el cierre de sesión en Firebase
+  // Cuadro de diálogo para confirmar el cierre de sesión en Firebase y Provider
   void _confirmarCerrarSesion(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('¿Cerrar sesión?'),
         content: const Text('Se cerrará tu sesión actual en Kanbly.'),
         shape: RoundedRectangleBorder(
@@ -123,18 +125,27 @@ class MenuLateral extends StatelessWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
           ),
           TextButton(
             onPressed: () async {
-              Navigator.pop(context); // Cierra el diálogo de alerta
-              Navigator.pop(context); // Cierra el menú lateral (Drawer)
+              // 1. Cerramos únicamente el cuadro de diálogo
+              Navigator.pop(dialogContext);
 
-              // 1. Cerramos la sesión activa en los servidores de Firebase
-              await FirebaseAuth.instance.signOut();
+              // 2. Obtenemos tu controlador de autenticación mediante Provider
+              final authController = Provider.of<AuthController>(context, listen: false);
 
-              // 2. Redirigimos al Login eliminando todo el historial anterior de navegación
+              // 3. Cerramos sesión DESDE EL CONTROLADOR para que actualice 'isAuthenticated = false'
+              // Nota: Si en tu AuthController el metodo se llama signOut() en lugar de logout(), cámbialo aquí:
+              try {
+                await authController.logout();
+              } catch (e) {
+                // Por seguridad, si falla el controlador, forzamos el cierre en Firebase
+                await FirebaseAuth.instance.signOut();
+              }
+
+              // 4. Redirigimos al Login limpiando el historial
               if (context.mounted) {
                 Navigator.pushAndRemoveUntil(
                   context,
