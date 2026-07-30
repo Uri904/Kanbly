@@ -240,32 +240,38 @@ class _RegisterViewState extends State<RegisterView> {
                                     ? FileImage(_imagenPerfil!)
                                     : null,
                                 child: _imagenPerfil == null
-                                    ? Icon(Icons.person_add, size: 40, color: verdeAgua)
+                                    ? ShaderMask(
+                                  shaderCallback: (bounds) => const LinearGradient(
+                                    colors: [azulCielo, verdeTurquesa],
+                                  ).createShader(bounds),
+                                  child: const Icon(Icons.person_add, size: 40, color: Colors.white),
+                                )
                                     : null,
                               ),
                               Container(
                                 padding: const EdgeInsets.all(4),
                                 decoration: const BoxDecoration(
-                                  color: verdeTurquesa,
+                                  gradient: LinearGradient(colors: [azulCielo, verdeTurquesa]),
                                   shape: BoxShape.circle,
                                 ),
-                                child: const Icon(
-                                  Icons.camera_alt,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
+                                child: const Icon(Icons.camera_alt, color: Colors.white, size: 18),
                               ),
                             ],
                           ),
                           const SizedBox(height: 6),
-                          Text(
-                            _imagenPerfil == null
-                                ? 'Toca para seleccionar foto de perfil'
-                                : 'Cambiar foto de perfil',
-                            style: TextStyle(
-                              color: verdeTurquesa,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
+                          ShaderMask(
+                            shaderCallback: (bounds) => const LinearGradient(
+                              colors: [azulCielo, verdeTurquesa],
+                            ).createShader(bounds),
+                            child: Text(
+                              _imagenPerfil == null
+                                  ? 'Toca para seleccionar foto de perfil'
+                                  : 'Cambiar foto de perfil',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ),
                         ],
@@ -280,8 +286,12 @@ class _RegisterViewState extends State<RegisterView> {
                       decoration: InputDecoration(
                         labelText: 'Nombre Completo',
                         labelStyle: TextStyle(color: grisOscuro, fontSize: 14),
-                        prefixIcon: Icon(Icons.person_outline, color: verdeTurquesa, size: 20),
-                        border: OutlineInputBorder(
+                        prefixIcon: ShaderMask(
+                          shaderCallback: (bounds) => const LinearGradient(
+                            colors: [azulCielo, verdeTurquesa],
+                          ).createShader(bounds),
+                          child: const Icon(Icons.person_outline, color: Colors.white, size: 20),
+                        ),                        border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(color: verdeTurquesa.withOpacity(0.5)!),
                         ),
@@ -310,7 +320,12 @@ class _RegisterViewState extends State<RegisterView> {
                         labelStyle: TextStyle(color: grisOscuro, fontSize: 14),
                         hintText: 'ejemplo@e.uttecamac.edu.mx',
                         hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
-                        prefixIcon: Icon(Icons.email_outlined, color: verdeTurquesa, size: 20),
+                        prefixIcon: ShaderMask(
+                          shaderCallback: (bounds) => const LinearGradient(
+                            colors: [azulCielo, verdeTurquesa],
+                          ).createShader(bounds),
+                          child: const Icon(Icons.email_outlined, color: Colors.white, size: 20),
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(color: verdeTurquesa.withOpacity(0.5)!),
@@ -340,7 +355,12 @@ class _RegisterViewState extends State<RegisterView> {
                       decoration: InputDecoration(
                         labelText: 'Contraseña',
                         labelStyle: TextStyle(color: grisOscuro, fontSize: 14),
-                        prefixIcon: Icon(Icons.lock_outline, color: verdeTurquesa, size: 20),
+                        prefixIcon: ShaderMask(
+                          shaderCallback: (bounds) => const LinearGradient(
+                            colors: [azulCielo, verdeTurquesa],
+                          ).createShader(bounds),
+                          child: const Icon(Icons.lock_outline, color: Colors.white, size: 20),
+                        ),
                         suffixIcon: IconButton(
                           icon: Icon(
                             _obscurePassword ? Icons.visibility_off : Icons.visibility,
@@ -381,7 +401,12 @@ class _RegisterViewState extends State<RegisterView> {
                       decoration: InputDecoration(
                         labelText: 'Confirmar Contraseña',
                         labelStyle: TextStyle(color: grisOscuro, fontSize: 14),
-                        prefixIcon: Icon(Icons.lock_outline, color: verdeTurquesa, size: 20),
+                        prefixIcon: ShaderMask(
+                          shaderCallback: (bounds) => const LinearGradient(
+                            colors: [azulCielo, verdeTurquesa],
+                          ).createShader(bounds),
+                          child: const Icon(Icons.lock_outline, color: Colors.white, size: 20),
+                        ),
                         suffixIcon: IconButton(
                           icon: Icon(
                             _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
@@ -431,7 +456,7 @@ class _RegisterViewState extends State<RegisterView> {
                               _acceptedTerms = value ?? false;
                             });
                           },
-                          activeColor: verdeTurquesa,
+                          activeColor: verdeTurquesa, // el Checkbox no soporta gradiente en su relleno, se queda sólido
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(4),
                           ),
@@ -446,22 +471,28 @@ class _RegisterViewState extends State<RegisterView> {
                                 height: 1.4,
                               ),
                               children: [
-                                const TextSpan(
-                                  text: 'He leído y acepto el ',
-                                ),
+                                const TextSpan(text: 'He leído y acepto el '),
                                 TextSpan(
                                   text: 'Aviso de Privacidad',
                                   style: TextStyle(
-                                    color: verdeTurquesa,
                                     fontWeight: FontWeight.bold,
                                     decoration: TextDecoration.underline,
+                                    foreground: Paint()
+                                      ..shader = const LinearGradient(
+                                        begin: Alignment.centerLeft,
+                                        end: Alignment.centerRight,
+                                        colors: [
+                                          Color(0xFF0B4FB3), // Azul del logo
+                                          Color(0xFF20D6A3), // Verde turquesa del logo
+                                        ],
+                                      ).createShader(
+                                        const Rect.fromLTWH(0, 0, 250, 30),
+                                      ),
                                   ),
                                   recognizer: TapGestureRecognizer()
                                     ..onTap = _mostrarTerminos,
                                 ),
-                                const TextSpan(
-                                  text: ' y los términos de uso de Kanbly.',
-                                ),
+                                const TextSpan(text: ' y los términos de uso de Kanbly.'),
                               ],
                             ),
                           ),
@@ -501,6 +532,7 @@ class _RegisterViewState extends State<RegisterView> {
                     // ✅ BOTÓN CREAR CUENTA - VERDE TURQUESA
                     SizedBox(
                       height: 50,
+
                       child: ElevatedButton(
                         onPressed: authController.isLoading || !_acceptedTerms
                             ? null
@@ -523,27 +555,33 @@ class _RegisterViewState extends State<RegisterView> {
                             letterSpacing: 0.5,
                           ),
                         ),
+
                       ),
                     ),
                     const SizedBox(height: 12),
 
                     // ✅ VOLVER AL LOGIN
-                    TextButton(
-                      onPressed: authController.isLoading ? null : () => Navigator.pop(context),
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: Text(
-                        '¿Ya tienes cuenta? Inicia sesión',
-                        style: TextStyle(
-                          color: verdeTurquesa,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
+            TextButton(
+            onPressed: authController.isLoading ? null : () => Navigator.pop(context),
+            style: TextButton.styleFrom(
+            padding: EdgeInsets.zero,
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(
+            colors: [azulCielo, verdeTurquesa],
+            ).createShader(bounds),
+            child: const Text(
+            '¿Ya tienes cuenta? Inicia sesión',
+            style: TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            ),
+            ),
+            ),
+            ),
                     const SizedBox(height: 8),
                   ],
                 ),

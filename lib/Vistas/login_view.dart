@@ -17,6 +17,10 @@ class _LoginViewState extends State<LoginView> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  final _emailFocus = FocusNode();      // ← nuevo
+  final _passwordFocus = FocusNode();
+  bool _emailHasFocus = false;          // ← nuevo
+  bool _passwordHasFocus = false;
 
   // ✅ COLORES OFICIALES DE KANBLY
   static const Color azulCielo = Color(0xFF52ABEB);
@@ -30,6 +34,8 @@ class _LoginViewState extends State<LoginView> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _emailFocus.dispose();     // ← nuevo
+    _passwordFocus.dispose();
     super.dispose();
   }
 
@@ -51,184 +57,180 @@ class _LoginViewState extends State<LoginView> {
             }
 
             return SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 32.0),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
+                padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 32.0),
+                child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: MediaQuery.of(context).size.height -
+                          MediaQuery.of(context).padding.top -
+                          MediaQuery.of(context).padding.bottom -
+                          64, // resta el padding vertical de arriba (32+32)
+                    ),
+                    child: IntrinsicHeight(
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
                     const SizedBox(height: 20),
 
-                    // ✅ LOGO CON DEGRADADO
-                    Container(
-                      width: 130,
-                      height: 130,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                      ),
-                      child: ClipOval(
-                        child: Image.asset(
-                          'assets/imagenes/logo_kanbly2.png',
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              decoration: const BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [azulCielo, verdeTurquesa],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Center(
-                                child: Text(
-                                  'K',
-                                  style: TextStyle(
-                                    fontSize: 56,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-
-                    // ✅ TÍTULO DEGRADADO
-                    ShaderMask(
-                      shaderCallback: (bounds) => const LinearGradient(
-                        colors: [azulCielo, verdeTurquesa],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ).createShader(bounds),
-                      child: const Text(
-                        'Kanbly',
-                        style: TextStyle(
-                          fontSize: 30,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-
-                    // ✅ SUBTÍTULO
-                    Text(
-                      'Fluye y avanza',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey[500],
-                        fontWeight: FontWeight.w400,
-                        letterSpacing: 2,
-                      ),
+// ✅ LOGO COMPLETO (imagen ya incluye nombre y tagline)
+                    Image.asset(
+                      'assets/imagenes/kanbly_logo.png',
+                      width: 260,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Text(
+                          'Kanbly',
+                          style: TextStyle(
+                            fontSize: 30,
+                            fontWeight: FontWeight.bold,
+                            color: azulCielo,
+                          ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 36),
 
                     // ✅ CAMPO DE CORREO CON BORDE VERDE TURQUESA
-                    TextFormField(
-                      controller: _emailController,
-                      decoration: InputDecoration(
-                        labelText: 'Correo institucional',
-                        labelStyle: const TextStyle(
-                          color: grisOscuro,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        hintText: 'ejemplo@e.uttecamac.edu.mx',
-                        hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
-                        prefixIcon: const Icon(Icons.email_outlined, color: verdeTurquesa, size: 20),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: verdeTurquesa.withOpacity(0.5)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: verdeTurquesa.withOpacity(0.3)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: verdeTurquesa, width: 2),
-                        ),
-                        filled: true,
-                        fillColor: blanco,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                      ),
-                      validator: Validators.validateInstitutionalEmail,
-                      keyboardType: TextInputType.emailAddress,
-                      enabled: !authController.isLoading,
-                    ),
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: EdgeInsets.all(_emailHasFocus ? 2.0 : 0),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                gradient: _emailHasFocus
+                                    ? const LinearGradient(colors: [azulCielo, verdeTurquesa])
+                                    : null,
+                              ),
+                              child: TextFormField(
+                                controller: _emailController,
+                                focusNode: _emailFocus, // ← nuevo
+                                decoration: InputDecoration(
+                                  labelText: 'Correo institucional',
+                                  labelStyle: const TextStyle(
+                                    color: grisOscuro,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  hintText: 'ejemplo@e.uttecamac.edu.mx',
+                                  hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
+                                  prefixIcon: ShaderMask(
+                                    shaderCallback: (bounds) => const LinearGradient(
+                                      colors: [azulCielo, verdeTurquesa],
+                                    ).createShader(bounds),
+                                    child: const Icon(Icons.email_outlined, color: Colors.white, size: 20),
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(_emailHasFocus ? 10 : 12),
+                                    borderSide: BorderSide(color: verdeTurquesa.withOpacity(0.5)),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide(color: verdeTurquesa.withOpacity(0.3)),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: const BorderSide(color: Colors.transparent, width: 2), // el gradiente lo da el Container exterior
+                                  ),
+                                  filled: true,
+                                  fillColor: blanco,
+                                  contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                                ),
+                                validator: Validators.validateInstitutionalEmail,
+                                keyboardType: TextInputType.emailAddress,
+                                enabled: !authController.isLoading,
+                              ),
+                            ),
                     const SizedBox(height: 14),
 
                     // ✅ CAMPO DE CONTRASEÑA CON BORDE VERDE TURQUESA
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      decoration: InputDecoration(
-                        labelText: 'Contraseña',
-                        labelStyle: const TextStyle(
-                          color: grisOscuro,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        prefixIcon: const Icon(Icons.lock_outline, color: verdeTurquesa, size: 20),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                            color: Colors.grey[400],
-                            size: 20,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _obscurePassword = !_obscurePassword;
-                            });
-                          },
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: verdeTurquesa.withOpacity(0.5)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: verdeTurquesa.withOpacity(0.3)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: verdeTurquesa, width: 2),
-                        ),
-                        filled: true,
-                        fillColor: blanco,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                      ),
-                      validator: Validators.validatePassword,
-                      enabled: !authController.isLoading,
-                    ),
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: EdgeInsets.all(_passwordHasFocus ? 2.0 : 0),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                gradient: _passwordHasFocus
+                                    ? const LinearGradient(colors: [azulCielo, verdeTurquesa])
+                                    : null,
+                              ),
+                              child: TextFormField(
+                                controller: _passwordController,
+                                focusNode: _passwordFocus, // ← nuevo
+                                obscureText: _obscurePassword,
+                                decoration: InputDecoration(
+                                  labelText: 'Contraseña',
+                                  labelStyle: const TextStyle(
+                                    color: grisOscuro,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  prefixIcon: ShaderMask(
+                                    shaderCallback: (bounds) => const LinearGradient(
+                                      colors: [azulCielo, verdeTurquesa],
+                                    ).createShader(bounds),
+                                    child: const Icon(Icons.lock_outline, color: Colors.white, size: 20),
+                                  ),
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                                      color: Colors.grey[400],
+                                      size: 20,
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        _obscurePassword = !_obscurePassword;
+                                      });
+                                    },
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide(color: verdeTurquesa.withOpacity(0.5)),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide(color: verdeTurquesa.withOpacity(0.3)),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: const BorderSide(color: Colors.transparent, width: 2),
+                                  ),
+                                  filled: true,
+                                  fillColor: blanco,
+                                  contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                                ),
+                                validator: Validators.validatePassword,
+                                enabled: !authController.isLoading,
+                              ),
+                            ),
                     const SizedBox(height: 8),
 
                     // ✅ OLVIDÉ CONTRASEÑA - VERDE TURQUESA
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: authController.isLoading ? null : () => _showResetPasswordDialog(context),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        child: const Text(
-                          '¿Olvidaste tu contraseña?',
-                          style: TextStyle(
-                            color: verdeTurquesa,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: authController.isLoading ? null : () => _showResetPasswordDialog(context),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: ShaderMask(
+                                  shaderCallback: (bounds) => const LinearGradient(
+                                    colors: [azulCielo, verdeTurquesa],
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
+                                  ).createShader(bounds),
+                                  child: const Text(
+                                    '¿Olvidaste tu contraseña?',
+                                    style: TextStyle(
+                                      color: Colors.white, // necesario: ShaderMask pinta sobre este color
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                     const SizedBox(height: 16),
 
                     // ✅ MENSAJE DE ERROR
@@ -259,31 +261,39 @@ class _LoginViewState extends State<LoginView> {
                       ),
 
                     // ✅ BOTÓN INICIAR SESIÓN - VERDE TURQUESA
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: authController.isLoading ? null : _handleLogin,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: verdeTurquesa,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: authController.isLoading
-                            ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
-                            : const Text(
-                          'Iniciar Sesión',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                    ),
+                            // ✅ BOTÓN INICIAR SESIÓN - CON DEGRADADO
+                            Container(
+                              width: double.infinity,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [azulCielo, verdeTurquesa],
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(12),
+                                  onTap: authController.isLoading ? null : _handleLogin,
+                                  child: Center(
+                                    child: authController.isLoading
+                                        ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                                        : const Text(
+                                      'Iniciar Sesión',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                     const SizedBox(height: 14),
 
                     // ✅ REGISTRO - VERDE TURQUESA
@@ -310,12 +320,19 @@ class _LoginViewState extends State<LoginView> {
                             minimumSize: Size.zero,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
-                          child: const Text(
-                            'Regístrate',
-                            style: TextStyle(
-                              color: verdeTurquesa,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
+                          child: ShaderMask(
+                            shaderCallback: (bounds) => const LinearGradient(
+                              colors: [azulCielo, verdeTurquesa],
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                            ).createShader(bounds),
+                            child: const Text(
+                              'Regístrate',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
                             ),
                           ),
                         ),
@@ -324,26 +341,39 @@ class _LoginViewState extends State<LoginView> {
                     const SizedBox(height: 10),
 
                     // ✅ DOMINIO - CON BORDE VERDE AGUA
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: blanco,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: verdeAgua.withOpacity(0.3)),
-                      ),
-                      child: const Text(
-                        'Solo correos institucionales @e.uttecamac.edu.mx',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: verdeAgua,
-                        ),
-                      ),
-                    ),
+                            Container(
+                              padding: const EdgeInsets.all(1.5), // grosor del "borde" degradado
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                gradient: LinearGradient(
+                                  colors: [azulCielo.withOpacity(0.4), verdeTurquesa.withOpacity(0.4)],
+                                ),
+                              ),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: blanco,
+                                  borderRadius: BorderRadius.circular(7),
+                                ),
+                                child: ShaderMask(
+                                  shaderCallback: (bounds) => const LinearGradient(
+                                    colors: [azulCielo, verdeTurquesa],
+                                  ).createShader(bounds),
+                                  child: const Text(
+                                    'Solo correos institucionales @e.uttecamac.edu.mx',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                     const SizedBox(height: 10),
                   ],
                 ),
               ),
-            );
+            ),),);
           },
         ),
       ),
