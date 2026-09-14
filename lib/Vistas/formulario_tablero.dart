@@ -26,6 +26,11 @@ class _FormularioTableroState extends State<FormularioTablero> {
   List<Usuario> _miembrosSeleccionados = [];
   String _fechaActualizacion = 'Sin actualizar';
 
+  // Módulos del tablero
+  bool _tieneCalendario = true;
+  bool _tieneNotas = true;
+  bool _tieneRecordatorios = true;
+
   // Colores (se definen sin const para permitir el uso de .withOpacity)
   Color blanco = const Color(0xFFFCFDFD);
   Color azulCielo = const Color(0xFF52ABEB);
@@ -45,11 +50,11 @@ class _FormularioTableroState extends State<FormularioTablero> {
     super.initState();
 
     if (widget.tablero != null) {
-
       _nombreController.text = widget.tablero!.nombre;
-
-      _descripcionController.text =
-          widget.tablero!.descripcion ?? "";
+      _descripcionController.text = widget.tablero!.descripcion ?? "";
+      _tieneCalendario = widget.tablero!.tieneCalendario;
+      _tieneNotas = widget.tablero!.tieneNotas;
+      _tieneRecordatorios = widget.tablero!.tieneRecordatorios;
 
       if (widget.tablero!.fechaActualizacion != null) {
         _fechaActualizacion =
@@ -143,6 +148,60 @@ class _FormularioTableroState extends State<FormularioTablero> {
             ),
             const SizedBox(height: 24),
 
+            // --- MÓDULOS ADICIONALES ---
+            const Text('Módulos Adicionales', style: TextStyle(color: Color(0xFF1E293B), fontWeight: FontWeight.bold, fontSize: 14)),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Column(
+                children: [
+                  CheckboxListTile(
+                    title: const Text('Calendario', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                    subtitle: const Text('Visualiza las tareas en formato mensual/semanal', style: TextStyle(fontSize: 12)),
+                    secondary: Icon(Icons.calendar_month, color: colorTema),
+                    value: _tieneCalendario,
+                    activeColor: colorTema,
+                    onChanged: (bool? value) {
+                      setState(() {
+                        _tieneCalendario = value ?? true;
+                      });
+                    },
+                  ),
+                  const Divider(height: 1),
+                  CheckboxListTile(
+                    title: const Text('Notas para las tareas', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                    subtitle: const Text('Añade descripciones, comentarios y anotaciones extras', style: TextStyle(fontSize: 12)),
+                    secondary: Icon(Icons.note_alt_outlined, color: colorTema),
+                    value: _tieneNotas,
+                    activeColor: colorTema,
+                    onChanged: (bool? value) {
+                      setState(() {
+                        _tieneNotas = value ?? true;
+                      });
+                    },
+                  ),
+                  const Divider(height: 1),
+                  CheckboxListTile(
+                    title: const Text('Recordatorios', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                    subtitle: const Text('Recibe alertas y notificaciones de fechas de vencimiento', style: TextStyle(fontSize: 12)),
+                    secondary: Icon(Icons.notifications_active_outlined, color: colorTema),
+                    value: _tieneRecordatorios,
+                    activeColor: colorTema,
+                    onChanged: (bool? value) {
+                      setState(() {
+                        _tieneRecordatorios = value ?? true;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
             // --- MIEMBROS (SOLO SI ES GRUPAL) ---
             if (widget.esGrupal) ...[
               Row(
@@ -180,7 +239,8 @@ class _FormularioTableroState extends State<FormularioTablero> {
                     return ListTile(
                       leading: const Icon(Icons.person),
                       title: Text(usuario.nombreCompleto),
-                      subtitle: Text(usuario.email),
+                      subtitle: Text('${usuario.email}\nRol Kanban: ${usuario.rol == "estudiante" ? "Programador / Desarrollador" : usuario.rol}'),
+                      isThreeLine: true,
 
                       trailing: IconButton(
                         icon: const Icon(
@@ -270,6 +330,9 @@ class _FormularioTableroState extends State<FormularioTablero> {
               : [uid, ..._miembrosSeleccionados.map((u) => u.id)],
 
           fechaCreacion: widget.tablero?.fechaCreacion ?? DateTime.now(),
+          tieneCalendario: _tieneCalendario,
+          tieneNotas: _tieneNotas,
+          tieneRecordatorios: _tieneRecordatorios,
 
           fechaActualizacion: widget.tablero != null
               ? DateTime.now()
@@ -305,57 +368,118 @@ class _FormularioTableroState extends State<FormularioTablero> {
     }
   }
   Future<void> _agregarMiembro() async {
-
-    final usuarios = await _firestoreService.buscarUsuarios("");
+    final TextEditingController emailController = TextEditingController();
+    final _dialogFormKey = GlobalKey<FormState>();
+    String rolSeleccionado = 'Programador / Desarrollador';
 
     showDialog(
       context: context,
       builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text("Invitar Miembro por Correo"),
+              content: SingleChildScrollView(
+                child: Form(
+                  key: _dialogFormKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Correo Institucional:', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: emailController,
+                        decoration: const InputDecoration(
+                          hintText: 'ejemplo@e.uttecamac.edu.mx',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.email_outlined),
+                        ),
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Ingresa un correo';
+                          }
+                          if (!value.trim().endsWith('@e.uttecamac.edu.mx')) {
+                            return 'Debe ser dominio @e.uttecamac.edu.mx';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      const Text('Rol / Rol Kanban en el Tablero:', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: rolSeleccionado,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'Líder de Proyecto', child: Text('Líder de Proyecto')),
+                          DropdownMenuItem(value: 'Programador / Desarrollador', child: Text('Programador / Desarrollador')),
+                          DropdownMenuItem(value: 'Tester / QA', child: Text('Tester / QA')),
+                          DropdownMenuItem(value: 'Diseñador UI/UX', child: Text('Diseñador UI/UX')),
+                          DropdownMenuItem(value: 'Analista', child: Text('Analista')),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() {
+                              rolSeleccionado = value;
+                            });
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (_dialogFormKey.currentState!.validate()) {
+                      final email = emailController.text.trim();
+                      
+                      // Buscar usuario en Firestore por email
+                      final usuario = await _firestoreService.obtenerUsuarioPorEmail(email);
+                      
+                      if (usuario == null) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Usuario no encontrado en la base de datos')),
+                        );
+                        return;
+                      }
 
-        return AlertDialog(
-          title: const Text("Agregar miembro"),
-
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 300,
-
-            child: ListView.builder(
-              itemCount: usuarios.length,
-              itemBuilder: (context, index) {
-
-                final usuario = usuarios[index];
-
-                return ListTile(
-                  title: Text(usuario.nombreCompleto),
-                  subtitle: Text(usuario.email),
-
-                  trailing: IconButton(
-                    icon: const Icon(Icons.person_add),
-
-                    onPressed: () {
+                      // Asignar el rol seleccionado temporalmente para guardarlo o mostrarlo
+                      // (Opcional, el usuario ya tiene un campo de rol por defecto)
+                      final usuarioConRol = usuario.copyWith(rol: rolSeleccionado);
 
                       setState(() {
-
-                        if (!_miembrosSeleccionados.any((u) => u.id == usuario.id)) {
-                          _miembrosSeleccionados.add(usuario);
+                        if (!_miembrosSeleccionados.any((u) => u.id == usuarioConRol.id)) {
+                          _miembrosSeleccionados.add(usuarioConRol);
+                        } else {
+                          // Si ya existe, actualizamos su rol en la lista
+                          int index = _miembrosSeleccionados.indexWhere((u) => u.id == usuarioConRol.id);
+                          _miembrosSeleccionados[index] = usuarioConRol;
                         }
-
                       });
 
+                      if (!context.mounted) return;
                       Navigator.pop(context);
-
-                    },
-                  ),
-                );
-
-              },
-            ),
-          ),
+                    }
+                  },
+                  child: const Text('Invitar'),
+                ),
+              ],
+            );
+          },
         );
-
       },
     );
-
   }
   Future<void> _cargarMiembros() async {
 

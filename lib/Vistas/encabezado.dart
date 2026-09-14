@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../controlador/auth_controller.dart';
 
 class Encabezado extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onMenuPressed;
@@ -14,7 +16,6 @@ class Encabezado extends StatelessWidget implements PreferredSizeWidget {
         icon: const Icon(Icons.menu, color: Color(0xFF37B5F4)),
         onPressed: onMenuPressed,
       ),
-// ... dentro de tu Widget build del Encabezado
       title: ShaderMask(
         shaderCallback: (Rect bounds) {
           return const LinearGradient(
@@ -37,19 +38,23 @@ class Encabezado extends StatelessWidget implements PreferredSizeWidget {
         ),
       ),
       centerTitle: true,
-      actions: const [
-        Padding(
-          padding: EdgeInsets.only(right: 16.0),
-          child: Center(
-            child: Text(
-              'Pece Pecas',
-              style: TextStyle(
-                color: Color(0xFF63B09C),
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
+      actions: [
+        Consumer<AuthController>(
+          builder: (context, authController, child) {
+            return Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: Center(
+                child: Text(
+                  authController.userName,
+                  style: const TextStyle(
+                    color: Color(0xFF63B09C),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
               ),
-            ),
-          ),
+            );
+          },
         )
       ],
     );

@@ -106,6 +106,23 @@ class FirestoreService {
         .map((doc) => Usuario.fromMap(doc.id, doc.data()))
         .toList();
   }
+  
+  Future<Usuario?> obtenerUsuarioPorEmail(String email) async {
+    try {
+      final snapshot = await _firestore
+          .collection('usuarios')
+          .where('email', isEqualTo: email.trim())
+          .limit(1)
+          .get();
+      if (snapshot.docs.isNotEmpty) {
+        final doc = snapshot.docs.first;
+        return Usuario.fromMap(doc.id, doc.data());
+      }
+      return null;
+    } catch (e) {
+      throw Exception('Error al obtener usuario por email: $e');
+    }
+  }
   Future<Usuario?> obtenerUsuarioPorId(String id) async {
 
     final doc = await _firestore

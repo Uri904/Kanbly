@@ -101,6 +101,50 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                       tooltip: 'Configuración del tablero',
                       onPressed: () => _abrirEdicionTablero(context),
                     ),
+                  // --- BOTÓN DE MENÚ DE MÓDULOS (Calendario, Notas, Recordatorios) ---
+                  if (widget.tablero != null)
+                    PopupMenuButton<String>(
+                      icon: Icon(Icons.apps_rounded, color: colorAcento, size: 26),
+                      tooltip: 'Módulos del tablero',
+                      onSelected: (modulo) {
+                        _abrirModulo(context, modulo);
+                      },
+                      itemBuilder: (context) => [
+                        if (widget.tablero!.tieneCalendario)
+                          const PopupMenuItem(
+                            value: 'calendario',
+                            child: Row(
+                              children: [
+                                Icon(Icons.calendar_month, color: Colors.blue),
+                                SizedBox(width: 10),
+                                Text('Calendario'),
+                              ],
+                            ),
+                          ),
+                        if (widget.tablero!.tieneNotas)
+                          const PopupMenuItem(
+                            value: 'notas',
+                            child: Row(
+                              children: [
+                                Icon(Icons.note_alt_outlined, color: Colors.orange),
+                                SizedBox(width: 10),
+                                Text('Notas para tareas'),
+                              ],
+                            ),
+                          ),
+                        if (widget.tablero!.tieneRecordatorios)
+                          const PopupMenuItem(
+                            value: 'recordatorios',
+                            child: Row(
+                              children: [
+                                Icon(Icons.notifications_active_outlined, color: Colors.red),
+                                SizedBox(width: 10),
+                                Text('Recordatorios'),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
                   // --- BOTÓN PARA CAMBIAR ESTRATEGIA DE ORDENAMIENTO ---
                   PopupMenuButton<String>(
                     icon: const Icon(Icons.sort_rounded, color: Color(0xFF1E293B), size: 26),
@@ -345,6 +389,96 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
     if (mounted) {
       setState(() {});
     }
+  }
+
+  // Despliega una hermosa vista modal ficticia o funcional para los módulos adicionales
+  void _abrirModulo(BuildContext context, String tipoModulo) {
+    String titulo = '';
+    IconData icono = Icons.help;
+    Color color = Colors.blue;
+    String descripcion = '';
+
+    if (tipoModulo == 'calendario') {
+      titulo = 'Calendario de Kanban';
+      icono = Icons.calendar_month;
+      color = Colors.blue;
+      descripcion = 'Aquí puedes agendar los entregables y visualizar tus tareas ordenadas por su fecha de vencimiento.';
+    } else if (tipoModulo == 'notas') {
+      titulo = 'Notas y Comentarios';
+      icono = Icons.note_alt_outlined;
+      color = Colors.orange;
+      descripcion = 'Añade notas rápidas adhesivas, anotaciones del equipo y retroalimentación para complementar tus tableros.';
+    } else if (tipoModulo == 'recordatorios') {
+      titulo = 'Alertas y Recordatorios';
+      icono = Icons.notifications_active_outlined;
+      color = Colors.red;
+      descripcion = 'Configura alarmas automáticas y recibe notificaciones antes de que expiren los plazos de tus tareas.';
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 50,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              const SizedBox(height: 20),
+              CircleAvatar(
+                radius: 30,
+                backgroundColor: color.withOpacity(0.1),
+                child: Icon(icono, color: color, size: 32),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                titulo,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                descripcion,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.check, color: Colors.white),
+                label: const Text('Entendido', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: color,
+                  minimumSize: const Size(double.infinity, 48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   // Formateador visual rápido para la fecha

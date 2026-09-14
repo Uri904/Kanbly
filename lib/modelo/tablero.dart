@@ -23,6 +23,11 @@ class Tablero {
   /// Permite ocultar/desactivar tableros sin eliminarlos
   final bool activo;
 
+  /// Módulos adicionales activados para el tablero
+  final bool tieneCalendario;
+  final bool tieneNotas;
+  final bool tieneRecordatorios;
+
   /// Configuración adicional
   final Map<String, dynamic>? configuracion;
 
@@ -37,6 +42,9 @@ class Tablero {
     this.fechaActualizacion,
     this.color,
     this.activo = true,
+    this.tieneCalendario = true,
+    this.tieneNotas = true,
+    this.tieneRecordatorios = true,
     this.configuracion,
   });
 
@@ -54,6 +62,9 @@ class Tablero {
       (map['fechaActualizacion'] as Timestamp?)?.toDate(),
       color: map['color'],
       activo: map['activo'] ?? true,
+      tieneCalendario: map['tieneCalendario'] ?? true,
+      tieneNotas: map['tieneNotas'] ?? true,
+      tieneRecordatorios: map['tieneRecordatorios'] ?? true,
       configuracion: map['configuracion'] != null
           ? Map<String, dynamic>.from(map['configuracion'])
           : null,
@@ -73,6 +84,9 @@ class Tablero {
           : null,
       'color': color,
       'activo': activo,
+      'tieneCalendario': tieneCalendario,
+      'tieneNotas': tieneNotas,
+      'tieneRecordatorios': tieneRecordatorios,
       'configuracion': configuracion,
     };
   }
@@ -88,6 +102,9 @@ class Tablero {
     DateTime? fechaActualizacion,
     String? color,
     bool? activo,
+    bool? tieneCalendario,
+    bool? tieneNotas,
+    bool? tieneRecordatorios,
     Map<String, dynamic>? configuracion,
   }) {
     return Tablero(
@@ -101,6 +118,9 @@ class Tablero {
       fechaActualizacion: fechaActualizacion ?? this.fechaActualizacion,
       color: color ?? this.color,
       activo: activo ?? this.activo,
+      tieneCalendario: tieneCalendario ?? this.tieneCalendario,
+      tieneNotas: tieneNotas ?? this.tieneNotas,
+      tieneRecordatorios: tieneRecordatorios ?? this.tieneRecordatorios,
       configuracion: configuracion ?? this.configuracion,
     );
   }
