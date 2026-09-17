@@ -11,6 +11,7 @@ import '../modelo/tablero.dart';
 import '../modelo/tarea.dart';
 import '../servicios/firestore_service.dart';
 import '../utilerias/formato_util.dart';
+import 'calendario_tablero.dart';
 
 // ==========================================
 // 1. PANTALLA PRINCIPAL: TABLERO KANBAN
@@ -393,6 +394,22 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
 
   // Despliega una hermosa vista modal ficticia o funcional para los módulos adicionales
   void _abrirModulo(BuildContext context, String tipoModulo) {
+    // Si seleccionó Calendario
+    if (tipoModulo == 'calendario') {
+      if (widget.tablero == null) return;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CalendarioTablero(
+            tableroId: widget.tablero!.id,
+          ),
+        ),
+      );
+
+      return;
+    }
+
     String titulo = '';
     IconData icono = Icons.help;
     Color color = Colors.blue;
