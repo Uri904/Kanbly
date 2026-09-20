@@ -392,11 +392,12 @@ class _LoginViewState extends State<LoginView> {
 
   // ✅ DIÁLOGO CORREGIDO: SE ENVOLVIÓ EL CONTENIDO EN UN FORM CON formKey
   void _showResetPasswordDialog(BuildContext context) {
-    final emailController = TextEditingController();
+    final emailController = TextEditingController(text: _emailController.text);
     final formKey = GlobalKey<FormState>();
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
@@ -447,13 +448,28 @@ class _LoginViewState extends State<LoginView> {
             onPressed: () async {
               if (formKey.currentState?.validate() ?? false) {
                 final authController = Provider.of<AuthController>(context, listen: false);
+                final messenger = ScaffoldMessenger.of(context);
+                final navigator = Navigator.of(context);
+
                 final success = await authController.resetPassword(emailController.text);
-                if (success && context.mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
+
+                navigator.pop();
+
+                if (success) {
+                  messenger.showSnackBar(
                     const SnackBar(
-                      content: Text('Correo de recuperación enviado'),
+                      content: Text('Enviamos un enlace de recuperación a tu correo institucional. Revisa también spam.'),
                       backgroundColor: Colors.green,
+                      duration: Duration(seconds: 5),
+                    ),
+                  );
+                } else {
+                  final mensaje = authController.errorMessage ?? 'No se pudo enviar el correo';
+                  authController.clearError(); // evita que el error se quede en la pantalla de login
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text(mensaje),
+                      backgroundColor: Colors.red,
                     ),
                   );
                 }
