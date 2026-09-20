@@ -399,19 +399,25 @@ class _LoginViewState extends State<LoginView> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
+        // ✅ Ajuste para que no se desborde en pantallas pequeñas
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.lock_reset, color: verdeTurquesa, size: 24),
-            SizedBox(width: 10),
-            Text(
-              'Restablecer Contraseña',
-              style: TextStyle(fontWeight: FontWeight.bold),
+            const Icon(Icons.lock_reset, color: verdeTurquesa, size: 24),
+            const SizedBox(width: 10),
+            // ✅ Expanded evita el desbordamiento del texto en el título
+            const Expanded(
+              child: Text(
+                'Restablecer Contraseña',
+                style: TextStyle(fontWeight: FontWeight.bold),
+                overflow: TextOverflow.visible, // Permite que baje de línea
+              ),
             ),
           ],
         ),
         content: Form(
-          key: formKey, // <-- ¡Aquí quedó vinculada la llave de validación!
+          key: formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -465,7 +471,7 @@ class _LoginViewState extends State<LoginView> {
                   );
                 } else {
                   final mensaje = authController.errorMessage ?? 'No se pudo enviar el correo';
-                  authController.clearError(); // evita que el error se quede en la pantalla de login
+                  authController.clearError();
                   messenger.showSnackBar(
                     SnackBar(
                       content: Text(mensaje),
