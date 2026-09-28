@@ -30,6 +30,7 @@ class _FormularioTableroState extends State<FormularioTablero>
 
   List<Usuario> _miembrosSeleccionados = [];
   Map<String, MiembroTableroInfo> _miembrosInfo = {};
+  List<Map<String, dynamic>> _invitacionesPendientes = [];
   String _fechaActualizacion = 'Sin actualizar';
 
   // Módulos del tablero
@@ -110,45 +111,45 @@ class _FormularioTableroState extends State<FormularioTablero>
           widget.tablero != null
               ? 'Editar Tablero'
               : widget.esGrupal
-                  ? 'Nuevo Tablero Grupal'
-                  : 'Nuevo Tablero Individual',
+              ? 'Nuevo Tablero Grupal'
+              : 'Nuevo Tablero Individual',
           style: TextStyle(
               color: grisOscuro, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         centerTitle: true,
         bottom: widget.esGrupal
             ? TabBar(
-                controller: _tabController,
-                labelColor: colorTema,
-                unselectedLabelColor: Colors.grey.shade600,
-                indicatorColor: colorTema,
-                indicatorWeight: 3,
-                indicatorSize: TabBarIndicatorSize.label,
-                labelStyle:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                tabs: const [
-                  Tab(
-                    icon: Icon(Icons.tune_rounded, size: 20),
-                    text: 'General y Módulos',
-                  ),
-                  Tab(
-                    icon: Icon(Icons.people_outline_rounded, size: 20),
-                    text: 'Miembros y Permisos',
-                  ),
-                ],
-              )
+          controller: _tabController,
+          labelColor: colorTema,
+          unselectedLabelColor: Colors.grey.shade600,
+          indicatorColor: colorTema,
+          indicatorWeight: 3,
+          indicatorSize: TabBarIndicatorSize.label,
+          labelStyle:
+          const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          tabs: const [
+            Tab(
+              icon: Icon(Icons.tune_rounded, size: 20),
+              text: 'General y Módulos',
+            ),
+            Tab(
+              icon: Icon(Icons.people_outline_rounded, size: 20),
+              text: 'Miembros y Permisos',
+            ),
+          ],
+        )
             : null,
       ),
       body: Form(
         key: _formKey,
         child: widget.esGrupal
             ? TabBarView(
-                controller: _tabController,
-                children: [
-                  _construirPestanaGeneral(colorTema),
-                  _construirPestanaMiembros(colorTema),
-                ],
-              )
+          controller: _tabController,
+          children: [
+            _construirPestanaGeneral(colorTema),
+            _construirPestanaMiembros(colorTema),
+          ],
+        )
             : _construirPestanaGeneral(colorTema),
       ),
       bottomNavigationBar: Container(
@@ -291,7 +292,7 @@ class _FormularioTableroState extends State<FormularioTablero>
               _construirSwitchModulo(
                 titulo: 'Calendario',
                 subtitulo:
-                    'Agendar entregables y visualizar fechas en el calendario',
+                'Agendar entregables y visualizar fechas en el calendario',
                 icono: Icons.calendar_month,
                 colorIcono: Colors.blue,
                 valor: _tieneCalendario,
@@ -302,7 +303,7 @@ class _FormularioTableroState extends State<FormularioTablero>
               _construirSwitchModulo(
                 titulo: 'Notas para tareas',
                 subtitulo:
-                    'Añadir anotaciones y documentación técnica a las tareas',
+                'Añadir anotaciones y documentación técnica a las tareas',
                 icono: Icons.note_alt_outlined,
                 colorIcono: Colors.orange,
                 valor: _tieneNotas,
@@ -313,7 +314,7 @@ class _FormularioTableroState extends State<FormularioTablero>
               _construirSwitchModulo(
                 titulo: 'Recordatorios y Alertas',
                 subtitulo:
-                    'Alertas de vencimiento para los integrantes del equipo',
+                'Alertas de vencimiento para los integrantes del equipo',
                 icono: Icons.notifications_active_outlined,
                 colorIcono: Colors.redAccent,
                 valor: _tieneRecordatorios,
@@ -333,8 +334,8 @@ class _FormularioTableroState extends State<FormularioTablero>
                 label: 'Creado el',
                 valor: widget.tablero != null
                     ? widget.tablero!.fechaCreacion
-                        .toString()
-                        .substring(0, 10)
+                    .toString()
+                    .substring(0, 10)
                     : DateTime.now().toString().substring(0, 10),
                 icono: Icons.calendar_today_rounded,
               ),
@@ -426,7 +427,7 @@ class _FormularioTableroState extends State<FormularioTablero>
                   Text(
                     '${_miembrosSeleccionados.length} miembros registrados',
                     style:
-                        TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                    TextStyle(color: Colors.grey.shade600, fontSize: 12),
                   ),
                 ],
               ),
@@ -506,8 +507,8 @@ class _FormularioTableroState extends State<FormularioTablero>
                   color: isOwner
                       ? Colors.amber.shade400
                       : info.esAdmin
-                          ? azulCielo
-                          : Colors.grey.shade200,
+                      ? azulCielo
+                      : Colors.grey.shade200,
                   width: isOwner || info.esAdmin ? 1.5 : 1.0,
                 ),
                 boxShadow: [
@@ -528,8 +529,8 @@ class _FormularioTableroState extends State<FormularioTablero>
                         backgroundColor: isOwner
                             ? Colors.amber.shade100
                             : info.esAdmin
-                                ? azulCielo.withValues(alpha: 0.15)
-                                : verdeTurquesa.withValues(alpha: 0.15),
+                            ? azulCielo.withValues(alpha: 0.15)
+                            : verdeTurquesa.withValues(alpha: 0.15),
                         child: Text(
                           usuario.nombreCompleto.isNotEmpty
                               ? usuario.nombreCompleto[0].toUpperCase()
@@ -538,8 +539,8 @@ class _FormularioTableroState extends State<FormularioTablero>
                             color: isOwner
                                 ? Colors.amber.shade900
                                 : info.esAdmin
-                                    ? azulCielo
-                                    : verdeTurquesa,
+                                ? azulCielo
+                                : verdeTurquesa,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -602,23 +603,23 @@ class _FormularioTableroState extends State<FormularioTablero>
                             texto: isOwner
                                 ? 'Dueño Principal'
                                 : info.esAdmin
-                                    ? 'Admin / Co-dueño'
-                                    : 'Miembro',
+                                ? 'Admin / Co-dueño'
+                                : 'Miembro',
                             colorFondo: isOwner
                                 ? Colors.amber.shade100
                                 : info.esAdmin
-                                    ? azulCielo.withValues(alpha: 0.15)
-                                    : Colors.grey.shade100,
+                                ? azulCielo.withValues(alpha: 0.15)
+                                : Colors.grey.shade100,
                             colorTexto: isOwner
                                 ? Colors.amber.shade900
                                 : info.esAdmin
-                                    ? azulCielo
-                                    : Colors.grey.shade800,
+                                ? azulCielo
+                                : Colors.grey.shade800,
                             icono: isOwner
                                 ? Icons.shield_rounded
                                 : info.esAdmin
-                                    ? Icons.admin_panel_settings
-                                    : Icons.person,
+                                ? Icons.admin_panel_settings
+                                : Icons.person,
                           ),
                           _badge(
                             texto: info.rolKanban,
@@ -649,11 +650,11 @@ class _FormularioTableroState extends State<FormularioTablero>
 
   // --- MODAL DE PERMISOS GRANULARES Y ROLES KANBAN ---
   void _abrirModalPermisosMiembro(
-    Usuario usuario,
-    MiembroTableroInfo infoActual,
-    bool isOwner,
-    String currentUserId,
-  ) {
+      Usuario usuario,
+      MiembroTableroInfo infoActual,
+      bool isOwner,
+      String currentUserId,
+      ) {
     final bool soyCreadorOriginal =
         widget.tablero?.esCreador(currentUserId) ?? true;
     final bool esObjetivoAdmin = infoActual.esAdmin;
@@ -714,8 +715,8 @@ class _FormularioTableroState extends State<FormularioTablero>
                           backgroundColor: isOwner
                               ? Colors.amber.shade100
                               : esAdminSeleccionado
-                                  ? azulCielo.withValues(alpha: 0.15)
-                                  : verdeTurquesa.withValues(alpha: 0.15),
+                              ? azulCielo.withValues(alpha: 0.15)
+                              : verdeTurquesa.withValues(alpha: 0.15),
                           child: Text(
                             usuario.nombreCompleto.isNotEmpty
                                 ? usuario.nombreCompleto[0].toUpperCase()
@@ -724,8 +725,8 @@ class _FormularioTableroState extends State<FormularioTablero>
                               color: isOwner
                                   ? Colors.amber.shade900
                                   : esAdminSeleccionado
-                                      ? azulCielo
-                                      : verdeTurquesa,
+                                  ? azulCielo
+                                  : verdeTurquesa,
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
                             ),
@@ -828,15 +829,15 @@ class _FormularioTableroState extends State<FormularioTablero>
                           subtitle: const Text(
                               'Otorga acceso y administración completa al tablero',
                               style:
-                                  TextStyle(fontSize: 11, color: Colors.grey)),
+                              TextStyle(fontSize: 11, color: Colors.grey)),
                           value: esAdminSeleccionado,
                           activeTrackColor: azulCielo,
                           onChanged: puedeEditar && soyCreadorOriginal
                               ? (val) {
-                                  setModalState(() {
-                                    esAdminSeleccionado = val;
-                                  });
-                                }
+                            setModalState(() {
+                              esAdminSeleccionado = val;
+                            });
+                          }
                               : null,
                         ),
                       ),
@@ -850,7 +851,7 @@ class _FormularioTableroState extends State<FormularioTablero>
                     const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
                       initialValue: _rolesKanbanDisponibles
-                              .contains(rolKanbanSeleccionado)
+                          .contains(rolKanbanSeleccionado)
                           ? rolKanbanSeleccionado
                           : 'Programador / Desarrollador',
                       decoration: InputDecoration(
@@ -872,11 +873,11 @@ class _FormularioTableroState extends State<FormularioTablero>
                       }).toList(),
                       onChanged: puedeEditar
                           ? (value) {
-                              if (value != null) {
-                                setModalState(
-                                    () => rolKanbanSeleccionado = value);
-                              }
-                            }
+                        if (value != null) {
+                          setModalState(
+                                  () => rolKanbanSeleccionado = value);
+                        }
+                      }
                           : null,
                     ),
                     const SizedBox(height: 20),
@@ -921,38 +922,38 @@ class _FormularioTableroState extends State<FormularioTablero>
                                 ? true
                                 : permisosTemp.crearTareas,
                             deshabilitado:
-                                !puedeEditar || esAdminSeleccionado || isOwner,
+                            !puedeEditar || esAdminSeleccionado || isOwner,
                             onChanged: (v) => setModalState(() =>
-                                permisosTemp =
-                                    permisosTemp.copyWith(crearTareas: v)),
+                            permisosTemp =
+                                permisosTemp.copyWith(crearTareas: v)),
                           ),
                           const Divider(height: 1),
                           _switchPermiso(
                             titulo: 'Mover y Reordenar Tareas',
                             subtitulo:
-                                'Permite arrastrar tareas entre las columnas',
+                            'Permite arrastrar tareas entre las columnas',
                             valor: esAdminSeleccionado || isOwner
                                 ? true
                                 : permisosTemp.moverTareas,
                             deshabilitado:
-                                !puedeEditar || esAdminSeleccionado || isOwner,
+                            !puedeEditar || esAdminSeleccionado || isOwner,
                             onChanged: (v) => setModalState(() =>
-                                permisosTemp =
-                                    permisosTemp.copyWith(moverTareas: v)),
+                            permisosTemp =
+                                permisosTemp.copyWith(moverTareas: v)),
                           ),
                           const Divider(height: 1),
                           _switchPermiso(
                             titulo: 'Editar Tareas',
                             subtitulo:
-                                'Modificar título, descripción, prioridad y fecha',
+                            'Modificar título, descripción, prioridad y fecha',
                             valor: esAdminSeleccionado || isOwner
                                 ? true
                                 : permisosTemp.editarTareas,
                             deshabilitado:
-                                !puedeEditar || esAdminSeleccionado || isOwner,
+                            !puedeEditar || esAdminSeleccionado || isOwner,
                             onChanged: (v) => setModalState(() =>
-                                permisosTemp =
-                                    permisosTemp.copyWith(editarTareas: v)),
+                            permisosTemp =
+                                permisosTemp.copyWith(editarTareas: v)),
                           ),
                           const Divider(height: 1),
                           _switchPermiso(
@@ -962,51 +963,51 @@ class _FormularioTableroState extends State<FormularioTablero>
                                 ? true
                                 : permisosTemp.eliminarTareas,
                             deshabilitado:
-                                !puedeEditar || esAdminSeleccionado || isOwner,
+                            !puedeEditar || esAdminSeleccionado || isOwner,
                             onChanged: (v) => setModalState(() =>
-                                permisosTemp =
-                                    permisosTemp.copyWith(eliminarTareas: v)),
+                            permisosTemp =
+                                permisosTemp.copyWith(eliminarTareas: v)),
                           ),
                           _encabezadoGrupoPermisos('Módulos y Configuración',
                               Icons.grid_view_rounded),
                           _switchPermiso(
                             titulo: 'Gestionar Módulos',
                             subtitulo:
-                                'Acceso al Calendario, Notas y Recordatorios',
+                            'Acceso al Calendario, Notas y Recordatorios',
                             valor: esAdminSeleccionado || isOwner
                                 ? true
                                 : permisosTemp.gestionarModulos,
                             deshabilitado:
-                                !puedeEditar || esAdminSeleccionado || isOwner,
+                            !puedeEditar || esAdminSeleccionado || isOwner,
                             onChanged: (v) => setModalState(() =>
-                                permisosTemp =
-                                    permisosTemp.copyWith(gestionarModulos: v)),
+                            permisosTemp =
+                                permisosTemp.copyWith(gestionarModulos: v)),
                           ),
                           const Divider(height: 1),
                           _switchPermiso(
                             titulo: 'Editar Configuración del Tablero',
                             subtitulo:
-                                'Cambiar nombre, descripción y opciones generales',
+                            'Cambiar nombre, descripción y opciones generales',
                             valor: esAdminSeleccionado || isOwner
                                 ? true
                                 : permisosTemp.editarTablero,
                             deshabilitado:
-                                !puedeEditar || esAdminSeleccionado || isOwner,
+                            !puedeEditar || esAdminSeleccionado || isOwner,
                             onChanged: (v) => setModalState(() =>
-                                permisosTemp =
-                                    permisosTemp.copyWith(editarTablero: v)),
+                            permisosTemp =
+                                permisosTemp.copyWith(editarTablero: v)),
                           ),
                           _encabezadoGrupoPermisos(
                               'Gestión del Equipo', Icons.badge_outlined),
                           _switchPermiso(
                             titulo: 'Administrar Miembros',
                             subtitulo:
-                                'Invitar integrantes y ajustar permisos regulares',
+                            'Invitar integrantes y ajustar permisos regulares',
                             valor: esAdminSeleccionado || isOwner
                                 ? true
                                 : permisosTemp.administrarMiembros,
                             deshabilitado:
-                                !puedeEditar || esAdminSeleccionado || isOwner,
+                            !puedeEditar || esAdminSeleccionado || isOwner,
                             onChanged: (v) => setModalState(() => permisosTemp =
                                 permisosTemp.copyWith(administrarMiembros: v)),
                           ),
@@ -1028,19 +1029,19 @@ class _FormularioTableroState extends State<FormularioTablero>
                         ),
                         onPressed: puedeEditar
                             ? () {
-                                setState(() {
-                                  _miembrosInfo[usuario.id] =
-                                      MiembroTableroInfo(
-                                    usuarioId: usuario.id,
-                                    rolKanban: rolKanbanSeleccionado,
-                                    esAdmin: esAdminSeleccionado,
-                                    permisos: esAdminSeleccionado
-                                        ? PermisosMiembro.todos
-                                        : permisosTemp,
-                                  );
-                                });
-                                Navigator.pop(context);
-                              }
+                          setState(() {
+                            _miembrosInfo[usuario.id] =
+                                MiembroTableroInfo(
+                                  usuarioId: usuario.id,
+                                  rolKanban: rolKanbanSeleccionado,
+                                  esAdmin: esAdminSeleccionado,
+                                  permisos: esAdminSeleccionado
+                                      ? PermisosMiembro.todos
+                                      : permisosTemp,
+                                );
+                          });
+                          Navigator.pop(context);
+                        }
                             : () => Navigator.pop(context),
                         child: Text(
                           puedeEditar ? 'Aplicar Cambios' : 'Cerrar',
@@ -1148,8 +1149,8 @@ class _FormularioTableroState extends State<FormularioTablero>
 
   Widget _chipInfo(
       {required String label,
-      required String valor,
-      required IconData icono}) {
+        required String valor,
+        required IconData icono}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -1180,9 +1181,9 @@ class _FormularioTableroState extends State<FormularioTablero>
 
   Widget _badge(
       {required String texto,
-      required Color colorFondo,
-      required Color colorTexto,
-      required IconData icono}) {
+        required Color colorFondo,
+        required Color colorTexto,
+        required IconData icono}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -1206,8 +1207,8 @@ class _FormularioTableroState extends State<FormularioTablero>
 
   InputDecoration _construirDecoracionInput(
       {required String pista,
-      required IconData icono,
-      required Color colorFoco}) {
+        required IconData icono,
+        required Color colorFoco}) {
     return InputDecoration(
       hintText: pista,
       hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
@@ -1234,7 +1235,7 @@ class _FormularioTableroState extends State<FormularioTablero>
         final creadorIdFinal = widget.tablero?.creadorId ?? uid;
 
         List<String> miembrosFinales =
-            _miembrosSeleccionados.map((u) => u.id).toList();
+        _miembrosSeleccionados.map((u) => u.id).toList();
         if (!miembrosFinales.contains(creadorIdFinal)) {
           miembrosFinales.add(creadorIdFinal);
         }
@@ -1268,7 +1269,16 @@ class _FormularioTableroState extends State<FormularioTablero>
         } else {
           await _firestoreService.actualizarTablero(tablero);
         }
-
+        for (final invitacion in _invitacionesPendientes) {
+          await _firestoreService.crearInvitacion(
+            tableroId: tablero.id,
+            tableroNombre: tablero.nombre,
+            invitadoId: invitacion['usuarioId'],
+            invitadoEmail: invitacion['email'],
+            invitadoPor: uid,
+            rol: invitacion['rol'],
+          );
+        }
         if (!mounted) return;
         Navigator.of(context).pop(true);
       } catch (e) {
@@ -1370,7 +1380,7 @@ class _FormularioTableroState extends State<FormularioTablero>
                     if (dialogFormKey.currentState!.validate()) {
                       final email = emailController.text.trim();
                       final usuario =
-                          await _firestoreService.obtenerUsuarioPorEmail(email);
+                      await _firestoreService.obtenerUsuarioPorEmail(email);
 
                       if (usuario == null) {
                         if (!context.mounted) return;
@@ -1382,18 +1392,19 @@ class _FormularioTableroState extends State<FormularioTablero>
                         return;
                       }
 
-                      setState(() {
-                        if (!_miembrosSeleccionados
-                            .any((u) => u.id == usuario.id)) {
-                          _miembrosSeleccionados.add(usuario);
-                        }
-                        _miembrosInfo[usuario.id] = MiembroTableroInfo(
-                          usuarioId: usuario.id,
-                          rolKanban: rolSeleccionado,
-                          esAdmin: false,
-                          permisos: const PermisosMiembro(),
-                        );
-                      });
+                      final yaInvitado = _invitacionesPendientes.any(
+                            (invitacion) => invitacion['usuarioId'] == usuario.id,
+                      );
+
+                      if (!yaInvitado) {
+                        setState(() {
+                          _invitacionesPendientes.add({
+                            'usuarioId': usuario.id,
+                            'email': usuario.email,
+                            'rol': rolSeleccionado,
+                          });
+                        });
+                      }
 
                       if (!context.mounted) return;
                       Navigator.pop(context);

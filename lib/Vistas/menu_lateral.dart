@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../controlador/auth_controller.dart';
 import 'mis_tableros.dart';
 import 'login_view.dart';
+import './invitaciones_page.dart';
 
 class MenuLateral extends StatelessWidget {
   const MenuLateral({super.key});
@@ -85,6 +86,18 @@ class MenuLateral extends StatelessWidget {
                 context,
                 MaterialPageRoute(builder: (context) => const MisTableros()),
                     (route) => false,
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.mail_outline),
+            title: const Text('Invitaciones'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const InvitacionesPage(),
+                ),
               );
             },
           ),

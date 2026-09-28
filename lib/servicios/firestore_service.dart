@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../modelo/usuario.dart';
 import '../modelo/tablero.dart';
 import '../modelo/tarea.dart';
+import '../modelo/invitacion.dart';
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -414,6 +415,54 @@ class FirestoreService {
       'rol': rol,
       'estado': 'pendiente',
       'fechaCreacion': FieldValue.serverTimestamp(),
+    });
+  }
+  Stream<List<Invitacion>> obtenerMisInvitaciones(String uid) {
+    return FirebaseFirestore.instance
+        .collection('invitaciones')
+        .where('invitadoId', isEqualTo: uid)
+        .where('estado', isEqualTo: 'pendiente')
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        return Invitacion.fromMap(
+          doc.id,
+          doc.data(),
+        );
+      }).toList();
+    });
+  }
+  Future<void> aceptarInvitacion(Invitacion invitacion) async {
+    final usuarioActual = FirebaseAuth.instance.currentUser;
+
+    if (usuarioActual == null) {
+      throw Exception('Usuario no autenticado');
+    }
+
+    await FirebaseFirestore.instance
+        .collection('tableros')
+        .doc(invitacion.tableroId)
+        .update({
+      'miembrosIds': FieldValue.arrayUnion([
+        usuarioActual.uid,
+      ]),
+    });
+
+    await FirebaseFirestore.instance
+        .collection('invitaciones')
+        .doc(invitacion.id)
+        .update({
+      'estado': 'aceptada',
+      'fechaRespuesta': FieldValue.serverTimestamp(),
+    });
+  }
+  Future<void> rechazarInvitacion(String invitacionId) async {
+    await FirebaseFirestore.instance
+        .collection('invitaciones')
+        .doc(invitacionId)
+        .update({
+      'estado': 'rechazada',
+      'fechaRespuesta': FieldValue.serverTimestamp(),
     });
   }
 }

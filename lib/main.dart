@@ -9,6 +9,7 @@ import 'servicios/firestore_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 // Inicializar idioma español para fechas y calendario
@@ -17,7 +18,6 @@ Future<void> main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-
   } on FirebaseException catch (e) {
     if (e.code != 'duplicate-app') {
       rethrow;
