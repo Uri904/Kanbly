@@ -207,25 +207,76 @@ class _MisTablerosState extends State<MisTableros> {
         child: CircularProgressIndicator(),
       );
     }
-    if (_tableros.isEmpty) {
-      return const Center(
-        child: Text("No tienes tableros creados"),
+
+    // Filtramos los tableros dependiendo de la pestaña seleccionada
+    List<Tablero> tablerosFiltrados;
+
+    switch (_tabActiva) {
+      case 1:
+      // Individual
+        tablerosFiltrados =
+            _tableros.where((tablero) => !tablero.esGrupal).toList();
+        break;
+
+      case 2:
+      // En equipo
+        tablerosFiltrados =
+            _tableros.where((tablero) => tablero.esGrupal).toList();
+        break;
+
+      case 0:
+      default:
+      // General: mostrar todos
+        tablerosFiltrados = _tableros;
+        break;
+    }
+
+    // Si no hay tableros para la categoría seleccionada
+    if (tablerosFiltrados.isEmpty) {
+      String mensaje;
+
+      switch (_tabActiva) {
+        case 1:
+          mensaje = "No tienes tableros individuales";
+          break;
+        case 2:
+          mensaje = "No tienes tableros en equipo";
+          break;
+        default:
+          mensaje = "No tienes tableros creados";
+      }
+
+      return Center(
+        child: Text(
+          mensaje,
+          style: const TextStyle(
+            color: Colors.grey,
+            fontSize: 14,
+          ),
+        ),
       );
     }
+
     return RefreshIndicator(
-        onRefresh: _cargarTableros,
-        child: GridView.builder(      padding: const EdgeInsets.symmetric(horizontal: 16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 0.85,
-      ),
-      itemCount: _tableros.length,
-      itemBuilder: (context, index) {
-        return _crearTarjetaTablero(_tableros[index]);
-      },
+      onRefresh: _cargarTableros,
+      child: GridView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 0.85,
         ),
+
+        // IMPORTANTE: usamos la lista filtrada
+        itemCount: tablerosFiltrados.length,
+
+        itemBuilder: (context, index) {
+          return _crearTarjetaTablero(
+            tablerosFiltrados[index],
+          );
+        },
+      ),
     );
   }
 

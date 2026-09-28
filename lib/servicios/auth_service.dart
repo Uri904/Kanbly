@@ -116,7 +116,21 @@ class AuthService {
   // Enviar correo de restablecimiento de contraseña
   Future<void> resetPassword(String email) async {
     try {
-      await _auth.sendPasswordResetEmail(email: email);
+      await _auth.setLanguageCode('es'); // el correo de Firebase llega en español
+      await _auth.sendPasswordResetEmail(email: email.trim());
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'invalid-email':
+          throw Exception('El correo ingresado no es válido');
+        case 'user-not-found':
+          throw Exception('No existe una cuenta registrada con ese correo');
+        case 'too-many-requests':
+          throw Exception('Demasiados intentos. Intenta de nuevo más tarde');
+        case 'network-request-failed':
+          throw Exception('Sin conexión a internet. Verifica tu red');
+        default:
+          throw Exception('Error al enviar correo de restablecimiento: ${e.message}');
+      }
     } catch (e) {
       throw Exception('Error al enviar correo de restablecimiento: $e');
     }

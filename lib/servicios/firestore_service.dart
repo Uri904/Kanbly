@@ -395,4 +395,25 @@ class FirestoreService {
       throw Exception('Error al obtener tareas ordenadas: $e');
     }
   }
+  Future<void> crearInvitacion({
+    required String tableroId,
+    required String tableroNombre,
+    required String invitadoId,
+    required String invitadoEmail,
+    required String invitadoPor,
+    required String rol,
+  }) async {
+    await FirebaseFirestore.instance
+        .collection('invitaciones')
+        .add({
+      'tableroId': tableroId,
+      'tableroNombre': tableroNombre,
+      'invitadoId': invitadoId,
+      'invitadoEmail': invitadoEmail,
+      'invitadoPor': invitadoPor,
+      'rol': rol,
+      'estado': 'pendiente',
+      'fechaCreacion': FieldValue.serverTimestamp(),
+    });
+  }
 }

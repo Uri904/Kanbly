@@ -188,10 +188,17 @@ class AuthController extends ChangeNotifier {
   // Restablecer contraseña
   Future<bool> resetPassword(String email) async {
     try {
-      await _authService.resetPassword(email);
+      _clearError();
+      final emailLimpio = email.trim();
+
+      if (!_authService.validarDominioInstitucional(emailLimpio)) {
+        throw Exception('Solo se permiten correos institucionales @e.uttecamac.edu.mx');
+      }
+
+      await _authService.resetPassword(emailLimpio);
       return true;
     } catch (e) {
-      _setError(e.toString());
+      _setError(e.toString().replaceFirst('Exception: ', ''));
       return false;
     }
   }
