@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 // --- IMPORTS DE LA ARQUITECTURA DEL EQUIPO ---
 import 'encabezado.dart';
@@ -45,6 +45,10 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
     final bool esGrupal = widget.tablero?.esGrupal ?? false;
     final Color colorAcento = esGrupal ? azulCielo : verdeTurquesa;
 
+    // Obtener permisos del usuario activo
+    final currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final permisos = widget.tablero?.obtenerPermisosDeUsuario(currentUid) ?? PermisosMiembro.todos;
+
     return GestureDetector(
       onTap: () {
         FocusScope.of(context).unfocus();
@@ -63,8 +67,16 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
 
         // 3. BOTÓN FLOTANTE (+) PARA CREAR TAREAS
         floatingActionButton: FloatingActionButton(
-          onPressed: () => _abrirFormularioNuevaTarea(context),
-          backgroundColor: colorAcento,
+          onPressed: () {
+            if (!permisos.crearTareas) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('No tienes permiso para crear tareas en este tablero')),
+              );
+              return;
+            }
+            _abrirFormularioNuevaTarea(context);
+          },
+          backgroundColor: permisos.crearTareas ? colorAcento : Colors.grey,
           elevation: 4,
           child: const Icon(Icons.add, color: Colors.white, size: 28),
         ),
@@ -96,7 +108,7 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                     ),
                   ),
                   // --- BOTÓN DE EDICIÓN DEL TABLERO ---
-                  if (widget.tablero != null)
+                  if (widget.tablero != null && (permisos.editarTablero || permisos.administrarMiembros))
                     IconButton(
                       icon: const Icon(Icons.settings_outlined, color: Colors.grey, size: 24),
                       tooltip: 'Configuración del tablero',
@@ -251,6 +263,7 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                         // --- COLUMNA 1: POR HACER (PENDIENTE) ---
                         _construirColumna(
                           titulo: 'POR HACER',
+                          estado: EstadoTarea.pendiente,
                           tareas: pendientes,
                           colorHeader: const Color(0xFF1E293B),
                         ),
@@ -259,6 +272,7 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                         // --- COLUMNA 2: EN PROGRESO ---
                         _construirColumna(
                           titulo: 'EN PROGRESO',
+                          estado: EstadoTarea.enProgreso,
                           tareas: enProgreso,
                           colorHeader: const Color(0xFF63B09C),
                         ),
@@ -267,6 +281,7 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                         // --- COLUMNA 3: COMPLETADA (HECHO) ---
                         _construirColumna(
                           titulo: 'COMPLETADA',
+                          estado: EstadoTarea.completada,
                           tareas: completadas,
                           colorHeader: const Color(0xFF63D0A1),
                         ),
@@ -275,6 +290,7 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                         // --- COLUMNA 4: BLOQUEADA ---
                         _construirColumna(
                           titulo: 'BLOQUEADA',
+                          estado: EstadoTarea.bloqueada,
                           tareas: bloqueadas,
                           colorHeader: const Color(0xFFE53E3E),
                         ),
@@ -295,59 +311,160 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
   // Constructor dinámico de columnas
   Widget _construirColumna({
     required String titulo,
+    required EstadoTarea estado,
     required List<Tarea> tareas,
     required Color colorHeader,
   }) {
-    return SizedBox(
-      width: 280,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Encabezado con el conteo real dinámico
-          ColumnHeaderWidget(
-            count: '${tareas.length}',
-            title: titulo,
-            colorHeader: colorHeader,
-          ),
-          const SizedBox(height: 12),
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final permisos = widget.tablero?.obtenerPermisosDeUsuario(uid) ?? PermisosMiembro.todos;
 
-          // Lista de tarjetas o mensaje de columna vacía
-          if (tareas.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(20),
-              alignment: Alignment.center,
-              child: Text(
-                'Sin tareas en esta columna',
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+    return DragTarget<Tarea>(
+      onAcceptWithDetails: (details) async {
+        if (!permisos.moverTareas) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('No tienes permiso para mover tareas en este tablero'),
+                backgroundColor: Colors.redAccent,
               ),
-            )
-          else
-            ...tareas.map((tarea) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              // --- AQUÍ ENVUELVES CON GESTURE DETECTOR ---
-              child: GestureDetector(
-                onTap: () {
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.white,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                    ),
-                    builder: (context) => DetalleTareaWidget(tarea: tarea),
-                  );
-                },
-                child: TaskCardWidget(
-                  title: tarea.titulo,
-                  desc: tarea.descripcion ?? 'Sin descripción adicional',
-                  date: _formatearFecha(tarea.fechaVencimiento),
-                  labelColor: FormatoUtil.obtenerColorPorPrioridad(tarea.prioridad),
-                  initials: 'TA',
+            );
+          }
+          return;
+        }
+        final tarea = details.data;
+        if (tarea.estado != estado) {
+          try {
+            await _firestoreService.actualizarEstadoTarea(tarea.id, estado.value);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Tarea "${tarea.titulo}" movida a $titulo'),
+                  duration: const Duration(seconds: 1),
+                  backgroundColor: colorHeader,
                 ),
+              );
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Error al mover tarea: $e')),
+              );
+            }
+          }
+        }
+      },
+      builder: (context, candidateData, rejectedData) {
+        final isHovered = candidateData.isNotEmpty;
+        return Container(
+          width: 280,
+          constraints: const BoxConstraints(minHeight: 450),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: isHovered
+                ? colorHeader.withValues(alpha: 0.12)
+                : Colors.grey.shade100.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isHovered ? colorHeader : Colors.grey.shade200,
+              width: isHovered ? 2.0 : 1.0,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Encabezado con el conteo real dinámico
+              ColumnHeaderWidget(
+                count: '${tareas.length}',
+                title: titulo,
+                colorHeader: colorHeader,
               ),
-            )),
-        ],
-      ),
+              const SizedBox(height: 12),
+
+              // Lista de tarjetas o mensaje de columna vacía
+              if (tareas.isEmpty)
+                Container(
+                  height: 100,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: isHovered ? colorHeader : Colors.grey.shade300,
+                      style: BorderStyle.none,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    isHovered ? 'Soltar aquí' : 'Sin tareas en esta columna',
+                    style: TextStyle(
+                      color: isHovered ? colorHeader : Colors.grey.shade400,
+                      fontWeight: isHovered ? FontWeight.bold : FontWeight.normal,
+                      fontSize: 12,
+                    ),
+                  ),
+                )
+              else
+                ...tareas.map((tarea) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: LongPressDraggable<Tarea>(
+                    data: tarea,
+                    maxSimultaneousDrags: permisos.moverTareas ? 1 : 0,
+                    delay: const Duration(milliseconds: 150),
+                    hapticFeedbackOnStart: true,
+                    axis: null,
+                    feedback: Material(
+                      type: MaterialType.transparency,
+                      child: Transform.scale(
+                        scale: 1.03,
+                        child: SizedBox(
+                          width: 280,
+                          child: TaskCardWidget(
+                            title: tarea.titulo,
+                            desc: tarea.descripcion ?? '',
+                            date: _formatearFecha(tarea.fechaVencimiento),
+                            labelColor: FormatoUtil.obtenerColorPorPrioridad(tarea.prioridad),
+                            initials: 'TA',
+                          ),
+                        ),
+                      ),
+                    ),
+                    childWhenDragging: Opacity(
+                      opacity: 0.3,
+                      child: TaskCardWidget(
+                        title: tarea.titulo,
+                        desc: tarea.descripcion ?? '',
+                        date: _formatearFecha(tarea.fechaVencimiento),
+                        labelColor: FormatoUtil.obtenerColorPorPrioridad(tarea.prioridad),
+                        initials: 'TA',
+                      ),
+                    ),
+                    child: GestureDetector(
+                      onTap: () {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.white,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                          ),
+                          builder: (context) => DetalleTareaWidget(
+                            tarea: tarea,
+                            tablero: widget.tablero,
+                          ),
+                        );
+                      },
+                      child: TaskCardWidget(
+                        title: tarea.titulo,
+                        desc: tarea.descripcion ?? 'Sin descripción adicional',
+                        date: _formatearFecha(tarea.fechaVencimiento),
+                        labelColor: FormatoUtil.obtenerColorPorPrioridad(tarea.prioridad),
+                        initials: 'TA',
+                      ),
+                    ),
+                  ),
+                )),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -375,13 +492,26 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
   void _abrirEdicionTablero(BuildContext context) async {
     if (widget.tablero == null) return;
 
-    // Navegamos al formulario pasándole las propiedades del tablero activo[cite: 2]
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final permisos = widget.tablero!.obtenerPermisosDeUsuario(uid);
+
+    if (!permisos.editarTablero && !permisos.administrarMiembros) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No tienes permiso para editar la configuración de este tablero'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    // Navegamos al formulario pasándole las propiedades del tablero activo
     await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => FormularioTablero(
-          esGrupal: widget.tablero!.esGrupal, // Le decimos si es equipo o individual[cite: 2]
-          tablero: widget.tablero,            // Le pasamos el objeto para que entre en modo edición[cite: 2]
+          esGrupal: widget.tablero!.esGrupal,
+          tablero: widget.tablero,
         ),
       ),
     );
@@ -394,6 +524,20 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
 
   // Despliega una hermosa vista modal ficticia o funcional para los módulos adicionales
   void _abrirModulo(BuildContext context, String tipoModulo) {
+    if (widget.tablero != null) {
+      final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+      final permisos = widget.tablero!.obtenerPermisosDeUsuario(uid);
+      if (!permisos.gestionarModulos) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No tienes permiso para acceder a los módulos de este tablero'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return;
+      }
+    }
+
     // Si seleccionó Calendario
     if (tipoModulo == 'calendario') {
       if (widget.tablero == null) return;
@@ -455,7 +599,7 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
               const SizedBox(height: 20),
               CircleAvatar(
                 radius: 30,
-                backgroundColor: color.withOpacity(0.1),
+                backgroundColor: color.withValues(alpha: 0.1),
                 child: Icon(icono, color: color, size: 32),
               ),
               const SizedBox(height: 16),
@@ -544,7 +688,7 @@ class ColumnHeaderWidget extends StatelessWidget {
           ),
           Container(
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(12),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -592,7 +736,7 @@ class TaskCardWidget extends StatelessWidget {
         border: Border.all(color: Colors.grey.shade200, width: 1.2),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 6,
             offset: const Offset(0, 3),
           ),
@@ -614,7 +758,13 @@ class TaskCardWidget extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
-              const Icon(Icons.more_horiz_rounded, color: Colors.grey, size: 18),
+              const Row(
+                children: [
+                  Icon(Icons.drag_indicator_rounded, color: Colors.grey, size: 20),
+                  SizedBox(width: 4),
+                  Icon(Icons.more_horiz_rounded, color: Colors.grey, size: 18),
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 10),

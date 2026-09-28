@@ -1,15 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 // --- IMPORTS DE LOS MODELOS Y SERVICIOS DEL EQUIPO ---
 import '../modelo/tarea.dart';
+import '../modelo/tablero.dart';
 import '../servicios/firestore_service.dart';
 import '../utilerias/formato_util.dart';
 
 class DetalleTareaWidget extends StatefulWidget {
   final Tarea tarea;
+  final Tablero? tablero;
 
-  const DetalleTareaWidget({super.key, required this.tarea});
+  const DetalleTareaWidget({
+    super.key,
+    required this.tarea,
+    this.tablero,
+  });
 
   @override
   State<DetalleTareaWidget> createState() => _DetalleTareaWidgetState();
@@ -55,6 +62,10 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
     const Color azulClaro = Color(0xFF37B5F4);
     const Color verdeAgua = Color(0xFF63B09C);
 
+    // Obtener permisos del usuario actual en este tablero
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final permisos = widget.tablero?.obtenerPermisosDeUsuario(uid) ?? PermisosMiembro.todos;
+
     // Color dinámico según la prioridad de la tarea
     final colorPrioridad = FormatoUtil.obtenerColorPorPrioridad(_prioridadActual);
 
@@ -76,35 +87,37 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: colorPrioridad.withOpacity(0.15),
+                    color: colorPrioridad.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: colorPrioridad, width: 1.5),
                   ),
                   child: Text(
                     _obtenerTextoPrioridad(_prioridadActual),
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: textoPrincipal,
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
-                // Botones de acción superior (Editar, Eliminar, Cerrar)
+                // Botones de acción superior (Editar, Eliminar, Cerrar) según permisos
                 Row(
                   children: [
-                    IconButton(
-                      icon: Icon(
-                        _modoEdicion ? Icons.edit_off_rounded : Icons.edit_rounded,
-                        color: azulCielo,
+                    if (permisos.editarTareas)
+                      IconButton(
+                        icon: Icon(
+                          _modoEdicion ? Icons.edit_off_rounded : Icons.edit_rounded,
+                          color: azulCielo,
+                        ),
+                        tooltip: _modoEdicion ? 'Cancelar edición' : 'Editar texto',
+                        onPressed: () => setState(() => _modoEdicion = !_modoEdicion),
                       ),
-                      tooltip: _modoEdicion ? 'Cancelar edición' : 'Editar texto',
-                      onPressed: () => setState(() => _modoEdicion = !_modoEdicion),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
-                      tooltip: 'Eliminar tarea',
-                      onPressed: _confirmarEliminacion,
-                    ),
+                    if (permisos.eliminarTareas)
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                        tooltip: 'Eliminar tarea',
+                        onPressed: _confirmarEliminacion,
+                      ),
                     IconButton(
                       icon: const Icon(Icons.close_rounded, color: Colors.grey),
                       onPressed: () => Navigator.pop(context),
@@ -174,7 +187,7 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<EstadoTarea>(
-              value: _estadoActual,
+              initialValue: _estadoActual,
               decoration: InputDecoration(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -187,7 +200,7 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
                   child: Text(estado.value, style: const TextStyle(fontWeight: FontWeight.w600)),
                 );
               }).toList(),
-              onChanged: _procesando ? null : _cambiarEstadoRapido,
+              onChanged: (_procesando || !permisos.moverTareas) ? null : _cambiarEstadoRapido,
             ),
             const SizedBox(height: 16),
 
@@ -262,7 +275,7 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
           margin: const EdgeInsets.symmetric(horizontal: 4),
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: activo ? color : color.withOpacity(0.1),
+            color: activo ? color : color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: color, width: activo ? 2 : 1),
           ),
@@ -361,21 +374,22 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
           ),
           TextButton(
             onPressed: () async {
-              Navigator.pop(context); // Cierra el diálogo
+              final nav = Navigator.of(context);
+              final messenger = ScaffoldMessenger.of(context);
+              nav.pop(); // Cierra el diálogo
               setState(() => _procesando = true);
               try {
-                // Ejecutamos el método eliminarTarea (que archiva en Firestore)
                 await _firestoreService.eliminarTarea(widget.tarea.id);
                 if (mounted) {
-                  Navigator.pop(context); // Cierra el modal de detalle
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  nav.pop(); // Cierra el modal de detalle
+                  messenger.showSnackBar(
                     const SnackBar(content: Text('Tarea eliminada'), backgroundColor: Colors.redAccent),
                   );
                 }
               } catch (e) {
                 if (mounted) {
                   setState(() => _procesando = false);
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  messenger.showSnackBar(
                     SnackBar(content: Text('Error al eliminar: $e'), backgroundColor: Colors.red),
                   );
                 }

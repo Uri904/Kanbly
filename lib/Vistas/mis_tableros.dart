@@ -477,7 +477,7 @@ class _MisTablerosState extends State<MisTableros> {
   // Navegación real hacia el formulario unificado pasando el parámetro correspondiente
   void _redirigirAFormulario({required bool esGrupal}) async {
 
-    final creado = await Navigator.push(
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => FormularioTablero(esGrupal: esGrupal),
@@ -488,28 +488,32 @@ class _MisTablerosState extends State<MisTableros> {
 
   }
   Future<void> _confirmarEliminar(Tablero tablero) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    if (!tablero.esAdminOCreador(uid)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Solo el dueño o administradores pueden eliminar el tablero'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
 
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) {
-
         return AlertDialog(
           title: const Text("Eliminar tablero"),
-          content: Text(
-              "¿Seguro que deseas eliminar '${tablero.nombre}'?"
-          ),
-
+          content: Text("¿Seguro que deseas eliminar '${tablero.nombre}'?"),
           actions: [
-
             TextButton(
-              onPressed: (){
+              onPressed: () {
                 Navigator.pop(context, false);
               },
               child: const Text("Cancelar"),
             ),
-
             TextButton(
-              onPressed: (){
+              onPressed: () {
                 Navigator.pop(context, true);
               },
               child: const Text(
@@ -517,24 +521,30 @@ class _MisTablerosState extends State<MisTableros> {
                 style: TextStyle(color: Colors.red),
               ),
             ),
-
           ],
         );
-
       },
     );
 
-
-    if(confirmar == true){
-
+    if (confirmar == true) {
       await _firestoreService.eliminarTablero(tablero.id);
-
       _cargarTableros();
-
     }
-
   }
+
   void _editarTablero(Tablero tablero) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final permisos = tablero.obtenerPermisosDeUsuario(uid);
+
+    if (!permisos.editarTablero && !permisos.administrarMiembros) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No tienes permiso para editar la configuración de este tablero'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
 
     await Navigator.push(
       context,
@@ -547,7 +557,6 @@ class _MisTablerosState extends State<MisTableros> {
     );
 
     _cargarTableros();
-
   }
   /* Si eligió Individual:
   Navigator.push(

@@ -9,21 +9,27 @@ class FormularioTablero extends StatefulWidget {
   final bool esGrupal;
   final Tablero? tablero;
 
-
-  const FormularioTablero({super.key, required this.esGrupal, this.tablero,
+  const FormularioTablero({
+    super.key,
+    required this.esGrupal,
+    this.tablero,
   });
 
   @override
   State<FormularioTablero> createState() => _FormularioTableroState();
 }
 
-class _FormularioTableroState extends State<FormularioTablero> {
+class _FormularioTableroState extends State<FormularioTablero>
+    with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _nombreController = TextEditingController();
   final TextEditingController _descripcionController = TextEditingController();
   final FirestoreService _firestoreService = FirestoreService();
-  final TextEditingController _buscarController = TextEditingController();
+
+  late TabController _tabController;
+
   List<Usuario> _miembrosSeleccionados = [];
+  Map<String, MiembroTableroInfo> _miembrosInfo = {};
   String _fechaActualizacion = 'Sin actualizar';
 
   // Módulos del tablero
@@ -31,23 +37,26 @@ class _FormularioTableroState extends State<FormularioTablero> {
   bool _tieneNotas = true;
   bool _tieneRecordatorios = true;
 
-  // Colores (se definen sin const para permitir el uso de .withOpacity)
-  Color blanco = const Color(0xFFFCFDFD);
-  Color azulCielo = const Color(0xFF52ABEB);
-  Color verdeTurquesa = const Color(0xFF63D0A1);
-  Color verdeAgua = const Color(0xFF63B09C);
-  Color grisOscuro = const Color(0xFF1E293B);
+  // Paleta oficial Kanbly
+  final Color blanco = const Color(0xFFFCFDFD);
+  final Color azulCielo = const Color(0xFF52ABEB);
+  final Color verdeTurquesa = const Color(0xFF63D0A1);
+  final Color grisOscuro = const Color(0xFF1E293B);
 
-  @override
-  void dispose() {
-    _nombreController.dispose();
-    _descripcionController.dispose();
-    _buscarController.dispose();
-    super.dispose();
-  }
+  static const List<String> _rolesKanbanDisponibles = [
+    'Líder de Proyecto',
+    'Programador / Desarrollador',
+    'Tester / QA',
+    'Diseñador UI/UX',
+    'Analista',
+    'Scrum Master',
+    'Product Owner',
+  ];
+
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: widget.esGrupal ? 2 : 1, vsync: this);
 
     if (widget.tablero != null) {
       _nombreController.text = widget.tablero!.nombre;
@@ -55,17 +64,38 @@ class _FormularioTableroState extends State<FormularioTablero> {
       _tieneCalendario = widget.tablero!.tieneCalendario;
       _tieneNotas = widget.tablero!.tieneNotas;
       _tieneRecordatorios = widget.tablero!.tieneRecordatorios;
+      _miembrosInfo = Map.from(widget.tablero!.miembrosInfo);
 
       if (widget.tablero!.fechaActualizacion != null) {
-        _fechaActualizacion =
-            widget.tablero!.fechaActualizacion!
-                .toString()
-                .substring(0, 16);
+        _fechaActualizacion = widget.tablero!.fechaActualizacion!
+            .toString()
+            .substring(0, 16);
       }
 
       _cargarMiembros();
+    } else {
+      // Para un tablero nuevo
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        _miembrosInfo[uid] = MiembroTableroInfo(
+          usuarioId: uid,
+          rolKanban: 'Líder de Proyecto',
+          esAdmin: true,
+          permisos: PermisosMiembro.todos,
+        );
+        _cargarCreadorActual();
+      }
     }
   }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _nombreController.dispose();
+    _descripcionController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final Color colorTema = widget.esGrupal ? azulCielo : verdeTurquesa;
@@ -77,224 +107,1107 @@ class _FormularioTableroState extends State<FormularioTablero> {
         elevation: 0,
         iconTheme: IconThemeData(color: colorTema),
         title: Text(
-            widget.tablero != null
-                ? 'Editar Tablero'
-                : widget.esGrupal
-                ? 'Nuevo Tablero Grupal'
-                : 'Nuevo Tablero Individual',
-          style: TextStyle(color: grisOscuro, fontWeight: FontWeight.bold, fontSize: 18),
+          widget.tablero != null
+              ? 'Editar Tablero'
+              : widget.esGrupal
+                  ? 'Nuevo Tablero Grupal'
+                  : 'Nuevo Tablero Individual',
+          style: TextStyle(
+              color: grisOscuro, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         centerTitle: true,
+        bottom: widget.esGrupal
+            ? TabBar(
+                controller: _tabController,
+                labelColor: colorTema,
+                unselectedLabelColor: Colors.grey.shade600,
+                indicatorColor: colorTema,
+                indicatorWeight: 3,
+                indicatorSize: TabBarIndicatorSize.label,
+                labelStyle:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                tabs: const [
+                  Tab(
+                    icon: Icon(Icons.tune_rounded, size: 20),
+                    text: 'General y Módulos',
+                  ),
+                  Tab(
+                    icon: Icon(Icons.people_outline_rounded, size: 20),
+                    text: 'Miembros y Permisos',
+                  ),
+                ],
+              )
+            : null,
       ),
       body: Form(
         key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-          children: [
-            Center(
-              child: CircleAvatar(
-                radius: 36,
-                backgroundColor: colorTema.withOpacity(0.1),
-                child: Icon(
-                  widget.esGrupal ? Icons.groups_rounded : Icons.person_outline_rounded,
-                  color: colorTema,
-                  size: 36,
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            // --- NOMBRE ---
-            const Text('Nombre del Tablero *', style: TextStyle(color: Color(0xFF1E293B), fontWeight: FontWeight.bold, fontSize: 14)),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _nombreController,
-              decoration: _construirDecoracionInput(pista: 'Ej. Sprint 1...', icono: Icons.dashboard_outlined, colorFoco: colorTema),
-              validator: (value) => (value == null || value.trim().isEmpty) ? 'Ingresa un nombre' : null,
-            ),
-            const SizedBox(height: 24),
-
-            // --- DESCRIPCIÓN ---
-            const Text('Descripción (Opcional)', style: TextStyle(color: Color(0xFF1E293B), fontWeight: FontWeight.bold, fontSize: 14)),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _descripcionController,
-              maxLines: 3,
-              decoration: _construirDecoracionInput(pista: '¿De qué trata este tablero?', icono: Icons.description_outlined, colorFoco: colorTema),
-            ),
-            const SizedBox(height: 24),
-
-            // --- FECHAS (SOLO LECTURA) ---
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    initialValue: DateTime.now().toString().substring(0, 10),
-                    readOnly: true,
-                    enabled: false,
-                    decoration: _construirDecoracionInput(pista: '', icono: Icons.calendar_today_rounded, colorFoco: colorTema).copyWith(labelText: 'Creado el'),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: TextFormField(
-                    initialValue:  _fechaActualizacion,
-                    readOnly: true,
-                    enabled: false,
-                    decoration: _construirDecoracionInput(pista: '', icono: Icons.update_rounded, colorFoco: colorTema).copyWith(labelText: 'Actualizado'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-
-            // --- MÓDULOS ADICIONALES ---
-            const Text('Módulos Adicionales', style: TextStyle(color: Color(0xFF1E293B), fontWeight: FontWeight.bold, fontSize: 14)),
-            const SizedBox(height: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: Column(
+        child: widget.esGrupal
+            ? TabBarView(
+                controller: _tabController,
                 children: [
-                  CheckboxListTile(
-                    title: const Text('Calendario', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                    subtitle: const Text('Visualiza las tareas en formato mensual/semanal', style: TextStyle(fontSize: 12)),
-                    secondary: Icon(Icons.calendar_month, color: colorTema),
-                    value: _tieneCalendario,
-                    activeColor: colorTema,
-                    onChanged: (bool? value) {
-                      setState(() {
-                        _tieneCalendario = value ?? true;
-                      });
-                    },
-                  ),
-                  const Divider(height: 1),
-                  CheckboxListTile(
-                    title: const Text('Notas para las tareas', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                    subtitle: const Text('Añade descripciones, comentarios y anotaciones extras', style: TextStyle(fontSize: 12)),
-                    secondary: Icon(Icons.note_alt_outlined, color: colorTema),
-                    value: _tieneNotas,
-                    activeColor: colorTema,
-                    onChanged: (bool? value) {
-                      setState(() {
-                        _tieneNotas = value ?? true;
-                      });
-                    },
-                  ),
-                  const Divider(height: 1),
-                  CheckboxListTile(
-                    title: const Text('Recordatorios', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                    subtitle: const Text('Recibe alertas y notificaciones de fechas de vencimiento', style: TextStyle(fontSize: 12)),
-                    secondary: Icon(Icons.notifications_active_outlined, color: colorTema),
-                    value: _tieneRecordatorios,
-                    activeColor: colorTema,
-                    onChanged: (bool? value) {
-                      setState(() {
-                        _tieneRecordatorios = value ?? true;
-                      });
-                    },
-                  ),
+                  _construirPestanaGeneral(colorTema),
+                  _construirPestanaMiembros(colorTema),
                 ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // --- MIEMBROS (SOLO SI ES GRUPAL) ---
-            if (widget.esGrupal) ...[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Miembros del Equipo', style: TextStyle(color: Color(0xFF1E293B), fontWeight: FontWeight.bold, fontSize: 14)),
-                  TextButton.icon(
-                    onPressed: _agregarMiembro,
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Añadir'),
-                  ),
-                ],
-              ),
-              Container(
-                constraints: const BoxConstraints(minHeight: 60),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: _miembrosSeleccionados.isEmpty
-                    ? const Center(
-                  child: Text(
-                    'No hay miembros añadidos aún.',
-                    style: TextStyle(color: Colors.grey, fontSize: 12),
-                  ),
-                )
-                    : ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _miembrosSeleccionados.length,
-                  itemBuilder: (context, index) {
-                    final usuario = _miembrosSeleccionados[index];
-
-                    return ListTile(
-                      leading: const Icon(Icons.person),
-                      title: Text(usuario.nombreCompleto),
-                      subtitle: Text('${usuario.email}\nRol Kanban: ${usuario.rol == "estudiante" ? "Programador / Desarrollador" : usuario.rol}'),
-                      isThreeLine: true,
-
-                      trailing: IconButton(
-                        icon: const Icon(
-                          Icons.remove_circle_outline,
-                          color: Colors.red,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _miembrosSeleccionados.removeWhere(
-                                  (u) => u.id == usuario.id,
-                            );
-                          });
-                        },
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 32),
-            ],
-
-            // --- BOTÓN GUARDAR ---
-            SizedBox(
-              height: 50,
-              child: ElevatedButton(
-                onPressed: widget.esGrupal && _miembrosSeleccionados.isEmpty
-                    ? null
-                    : _guardarTablero,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: colorTema,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: Text(
-                  widget.tablero != null
-                      ? 'Guardar Cambios'
-                      : 'Crear Tablero',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-            ),
+              )
+            : _construirPestanaGeneral(colorTema),
+      ),
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -4),
+            )
           ],
+        ),
+        child: SizedBox(
+          height: 50,
+          child: ElevatedButton.icon(
+            onPressed: _guardarTablero,
+            icon: const Icon(Icons.check_circle_outline, color: Colors.white),
+            label: Text(
+              widget.tablero != null ? 'Guardar Cambios' : 'Crear Tablero',
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: colorTema,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+              elevation: 0,
+            ),
+          ),
         ),
       ),
     );
   }
 
-  InputDecoration _construirDecoracionInput({required String pista, required IconData icono, required Color colorFoco}) {
+  // --- PESTAÑA 1: INFORMACIÓN GENERAL Y MÓDULOS ---
+  Widget _construirPestanaGeneral(Color colorTema) {
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+      children: [
+        // CABECERA CON ILUSTRACIÓN DE TIPO DE TABLERO
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+          decoration: BoxDecoration(
+            color: colorTema.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: colorTema.withValues(alpha: 0.2)),
+          ),
+          child: Column(
+            children: [
+              CircleAvatar(
+                radius: 34,
+                backgroundColor: colorTema.withValues(alpha: 0.18),
+                child: Icon(
+                  widget.esGrupal
+                      ? Icons.groups_rounded
+                      : Icons.person_outline_rounded,
+                  color: colorTema,
+                  size: 36,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                widget.esGrupal ? 'Tablero en Equipo' : 'Tablero Personal',
+                style: TextStyle(
+                  color: colorTema,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                widget.esGrupal
+                    ? 'Colaboración en tiempo real con permisos granulares y roles'
+                    : 'Espacio personal de organización de tareas',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // TARJETA DE INFORMACIÓN GENERAL
+        _tarjetaSeccion(
+          titulo: 'Información del Tablero',
+          icono: Icons.info_outline_rounded,
+          colorHeader: colorTema,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Nombre del Tablero *',
+                  style: TextStyle(
+                      color: Color(0xFF1E293B),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13)),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _nombreController,
+                decoration: _construirDecoracionInput(
+                  pista: 'Ej. Proyecto Integrador...',
+                  icono: Icons.dashboard_outlined,
+                  colorFoco: colorTema,
+                ),
+                validator: (value) => (value == null || value.trim().isEmpty)
+                    ? 'Ingresa un nombre'
+                    : null,
+              ),
+              const SizedBox(height: 16),
+              const Text('Descripción (Opcional)',
+                  style: TextStyle(
+                      color: Color(0xFF1E293B),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13)),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _descripcionController,
+                maxLines: 3,
+                decoration: _construirDecoracionInput(
+                  pista: 'Describe los objetivos del tablero...',
+                  icono: Icons.description_outlined,
+                  colorFoco: colorTema,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // TARJETA DE MÓDULOS ACTIVOS
+        _tarjetaSeccion(
+          titulo: 'Módulos Adicionales',
+          icono: Icons.apps_rounded,
+          colorHeader: colorTema,
+          child: Column(
+            children: [
+              _construirSwitchModulo(
+                titulo: 'Calendario',
+                subtitulo:
+                    'Agendar entregables y visualizar fechas en el calendario',
+                icono: Icons.calendar_month,
+                colorIcono: Colors.blue,
+                valor: _tieneCalendario,
+                onChanged: (val) => setState(() => _tieneCalendario = val),
+                colorTema: colorTema,
+              ),
+              const Divider(height: 1),
+              _construirSwitchModulo(
+                titulo: 'Notas para tareas',
+                subtitulo:
+                    'Añadir anotaciones y documentación técnica a las tareas',
+                icono: Icons.note_alt_outlined,
+                colorIcono: Colors.orange,
+                valor: _tieneNotas,
+                onChanged: (val) => setState(() => _tieneNotas = val),
+                colorTema: colorTema,
+              ),
+              const Divider(height: 1),
+              _construirSwitchModulo(
+                titulo: 'Recordatorios y Alertas',
+                subtitulo:
+                    'Alertas de vencimiento para los integrantes del equipo',
+                icono: Icons.notifications_active_outlined,
+                colorIcono: Colors.redAccent,
+                valor: _tieneRecordatorios,
+                onChanged: (val) => setState(() => _tieneRecordatorios = val),
+                colorTema: colorTema,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // METADATA
+        Row(
+          children: [
+            Expanded(
+              child: _chipInfo(
+                label: 'Creado el',
+                valor: widget.tablero != null
+                    ? widget.tablero!.fechaCreacion
+                        .toString()
+                        .substring(0, 10)
+                    : DateTime.now().toString().substring(0, 10),
+                icono: Icons.calendar_today_rounded,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _chipInfo(
+                label: 'Actualizado',
+                valor: _fechaActualizacion,
+                icono: Icons.update_rounded,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 32),
+      ],
+    );
+  }
+
+  Widget _construirSwitchModulo({
+    required String titulo,
+    required String subtitulo,
+    required IconData icono,
+    required Color colorIcono,
+    required bool valor,
+    required ValueChanged<bool> onChanged,
+    required Color colorTema,
+  }) {
+    return SwitchListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      title: Text(titulo,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+      subtitle: Text(subtitulo,
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+      secondary: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: colorIcono.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icono, color: colorIcono, size: 22),
+      ),
+      activeTrackColor: colorTema,
+      value: valor,
+      onChanged: onChanged,
+    );
+  }
+
+  // --- PESTAÑA 2: MIEMBROS Y PERMISOS DE EQUIPO ---
+  Widget _construirPestanaMiembros(Color colorTema) {
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final bool soyCreadorOriginal =
+        widget.tablero?.esCreador(currentUserId) ?? true;
+    final bool esAdmin =
+        widget.tablero?.esAdminOCreador(currentUserId) ?? true;
+
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+      children: [
+        // CABECERA CON BOTÓN INVITAR
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey.shade200),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 6,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Integrantes del Equipo',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: Color(0xFF1E293B)),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${_miembrosSeleccionados.length} miembros registrados',
+                    style:
+                        TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  ),
+                ],
+              ),
+              ElevatedButton.icon(
+                onPressed: (esAdmin || soyCreadorOriginal)
+                    ? _agregarMiembro
+                    : null,
+                icon: const Icon(Icons.person_add_alt_1_rounded,
+                    size: 18, color: Colors.white),
+                label: const Text('Invitar',
+                    style: TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colorTema,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // LISTA DE INTEGRANTES CON SUS TARJETAS Y ROLES
+        if (_miembrosSeleccionados.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(32),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: const Text(
+              'No hay miembros en este equipo aún.\nHaz clic en "Invitar" para sumar integrantes.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+          )
+        else
+          ..._miembrosSeleccionados.map((usuario) {
+            final id = usuario.id;
+            final isOwner =
+                (widget.tablero != null && widget.tablero!.esCreador(id)) ||
+                    (widget.tablero == null && id == currentUserId);
+
+            final info = _miembrosInfo[id] ??
+                MiembroTableroInfo(
+                  usuarioId: id,
+                  rolKanban: usuario.rol == 'estudiante'
+                      ? 'Programador / Desarrollador'
+                      : usuario.rol,
+                  esAdmin: isOwner,
+                );
+
+            // Regla de eliminación de miembros:
+            // - El Dueño Principal NUNCA puede ser removido.
+            // - Un Administrador solo puede ser removido por el Creador Original.
+            // - Un miembro regular puede ser removido por el Creador o por un Admin.
+            bool puedeRemover = false;
+            if (!isOwner) {
+              if (info.esAdmin) {
+                puedeRemover = soyCreadorOriginal;
+              } else {
+                puedeRemover = soyCreadorOriginal || esAdmin;
+              }
+            }
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isOwner
+                      ? Colors.amber.shade400
+                      : info.esAdmin
+                          ? azulCielo
+                          : Colors.grey.shade200,
+                  width: isOwner || info.esAdmin ? 1.5 : 1.0,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.02),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 20,
+                        backgroundColor: isOwner
+                            ? Colors.amber.shade100
+                            : info.esAdmin
+                                ? azulCielo.withValues(alpha: 0.15)
+                                : verdeTurquesa.withValues(alpha: 0.15),
+                        child: Text(
+                          usuario.nombreCompleto.isNotEmpty
+                              ? usuario.nombreCompleto[0].toUpperCase()
+                              : 'U',
+                          style: TextStyle(
+                            color: isOwner
+                                ? Colors.amber.shade900
+                                : info.esAdmin
+                                    ? azulCielo
+                                    : verdeTurquesa,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    usuario.nombreCompleto,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: Color(0xFF1E293B),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Text(
+                              usuario.email,
+                              style: TextStyle(
+                                  color: Colors.grey.shade600, fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (puedeRemover)
+                        IconButton(
+                          icon: const Icon(Icons.person_remove_outlined,
+                              color: Colors.redAccent, size: 20),
+                          tooltip: 'Remover del equipo',
+                          onPressed: () {
+                            setState(() {
+                              _miembrosSeleccionados
+                                  .removeWhere((u) => u.id == usuario.id);
+                              _miembrosInfo.remove(usuario.id);
+                            });
+                          },
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  const Divider(height: 1),
+                  const SizedBox(height: 8),
+
+                  // BADGES Y BOTÓN DE PERMISOS
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          _badge(
+                            texto: isOwner
+                                ? 'Dueño Principal'
+                                : info.esAdmin
+                                    ? 'Admin / Co-dueño'
+                                    : 'Miembro',
+                            colorFondo: isOwner
+                                ? Colors.amber.shade100
+                                : info.esAdmin
+                                    ? azulCielo.withValues(alpha: 0.15)
+                                    : Colors.grey.shade100,
+                            colorTexto: isOwner
+                                ? Colors.amber.shade900
+                                : info.esAdmin
+                                    ? azulCielo
+                                    : Colors.grey.shade800,
+                            icono: isOwner
+                                ? Icons.shield_rounded
+                                : info.esAdmin
+                                    ? Icons.admin_panel_settings
+                                    : Icons.person,
+                          ),
+                          _badge(
+                            texto: info.rolKanban,
+                            colorFondo: verdeTurquesa.withValues(alpha: 0.15),
+                            colorTexto: const Color(0xFF1E293B),
+                            icono: Icons.work_outline_rounded,
+                          ),
+                        ],
+                      ),
+                      TextButton.icon(
+                        onPressed: () => _abrirModalPermisosMiembro(
+                            usuario, info, isOwner, currentUserId),
+                        icon: const Icon(Icons.tune_rounded, size: 16),
+                        label: const Text('Permisos y Rol',
+                            style: TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }),
+        const SizedBox(height: 32),
+      ],
+    );
+  }
+
+  // --- MODAL DE PERMISOS GRANULARES Y ROLES KANBAN ---
+  void _abrirModalPermisosMiembro(
+    Usuario usuario,
+    MiembroTableroInfo infoActual,
+    bool isOwner,
+    String currentUserId,
+  ) {
+    final bool soyCreadorOriginal =
+        widget.tablero?.esCreador(currentUserId) ?? true;
+    final bool esObjetivoAdmin = infoActual.esAdmin;
+
+    // REGLAS DE JERARQUÍA EXIGIDAS POR EL USUARIO:
+    // 1. El Dueño Principal siempre tiene todos los permisos e inmutable.
+    // 2. Si el integrante objetivo es Admin, SOLO el Dueño Principal (Creador) puede editar sus permisos/rol.
+    // 3. Un integrante regular puede ser editado por el Creador o por un Admin.
+    final bool puedeEditar = !isOwner &&
+        (soyCreadorOriginal ||
+            (!esObjetivoAdmin &&
+                (widget.tablero?.esAdminOCreador(currentUserId) ?? true)));
+
+    String rolKanbanSeleccionado = infoActual.rolKanban;
+    bool esAdminSeleccionado = infoActual.esAdmin;
+    PermisosMiembro permisosTemp = infoActual.permisos;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                left: 24,
+                right: 24,
+                top: 16,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // INDICADOR SUPERIOR
+                    Center(
+                      child: Container(
+                        width: 44,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // ENCABEZADO PERFIL MIEMBRO
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 22,
+                          backgroundColor: isOwner
+                              ? Colors.amber.shade100
+                              : esAdminSeleccionado
+                                  ? azulCielo.withValues(alpha: 0.15)
+                                  : verdeTurquesa.withValues(alpha: 0.15),
+                          child: Text(
+                            usuario.nombreCompleto.isNotEmpty
+                                ? usuario.nombreCompleto[0].toUpperCase()
+                                : 'U',
+                            style: TextStyle(
+                              color: isOwner
+                                  ? Colors.amber.shade900
+                                  : esAdminSeleccionado
+                                      ? azulCielo
+                                      : verdeTurquesa,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                usuario.nombreCompleto,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: Color(0xFF1E293B)),
+                              ),
+                              Text(usuario.email,
+                                  style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // BANNER INFORMATIVO DE JERARQUÍA SEGÚN CASO
+                    if (isOwner)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.amber.shade300),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.shield_rounded,
+                                color: Colors.amber.shade900, size: 20),
+                            const SizedBox(width: 10),
+                            const Expanded(
+                              child: Text(
+                                'El Creador y Dueño Principal posee todos los permisos de forma inmutable.',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF78350F)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (esObjetivoAdmin && !soyCreadorOriginal)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.lock_outline_rounded,
+                                color: Colors.blue, size: 20),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Solo el Creador (Dueño Principal) del tablero puede modificar los permisos o el rol de un Administrador.',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.blue),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    // OPCIÓN DE ADMINISTRADOR / CO-DUEÑO
+                    if (!isOwner)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: SwitchListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 2),
+                          title: const Text('Administrador / Co-dueño',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: Color(0xFF1E293B))),
+                          subtitle: const Text(
+                              'Otorga acceso y administración completa al tablero',
+                              style:
+                                  TextStyle(fontSize: 11, color: Colors.grey)),
+                          value: esAdminSeleccionado,
+                          activeTrackColor: azulCielo,
+                          onChanged: puedeEditar && soyCreadorOriginal
+                              ? (val) {
+                                  setModalState(() {
+                                    esAdminSeleccionado = val;
+                                  });
+                                }
+                              : null,
+                        ),
+                      ),
+
+                    // CAMBIO DE ROL KANBAN EN EL EQUIPO
+                    const Text('Rol Kanban en el Equipo:',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: Color(0xFF1E293B))),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      initialValue: _rolesKanbanDisponibles
+                              .contains(rolKanbanSeleccionado)
+                          ? rolKanbanSeleccionado
+                          : 'Programador / Desarrollador',
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade200),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                      ),
+                      items: _rolesKanbanDisponibles.map((rol) {
+                        return DropdownMenuItem<String>(
+                          value: rol,
+                          child: Text(rol,
+                              style: const TextStyle(fontSize: 13)),
+                        );
+                      }).toList(),
+                      onChanged: puedeEditar
+                          ? (value) {
+                              if (value != null) {
+                                setModalState(
+                                    () => rolKanbanSeleccionado = value);
+                              }
+                            }
+                          : null,
+                    ),
+                    const SizedBox(height: 20),
+
+                    // SECCIÓN DE PERMISOS GRANULARES
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Permisos Granulares:',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: Color(0xFF1E293B))),
+                        if (esAdminSeleccionado || isOwner)
+                          Text(
+                            'Acceso Total',
+                            style: TextStyle(
+                              color: Colors.amber.shade900,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _encabezadoGrupoPermisos(
+                              'Gestión de Tareas', Icons.task_alt_rounded),
+                          _switchPermiso(
+                            titulo: 'Crear Tareas',
+                            subtitulo: 'Permite agregar nuevas tareas al tablero',
+                            valor: esAdminSeleccionado || isOwner
+                                ? true
+                                : permisosTemp.crearTareas,
+                            deshabilitado:
+                                !puedeEditar || esAdminSeleccionado || isOwner,
+                            onChanged: (v) => setModalState(() =>
+                                permisosTemp =
+                                    permisosTemp.copyWith(crearTareas: v)),
+                          ),
+                          const Divider(height: 1),
+                          _switchPermiso(
+                            titulo: 'Mover y Reordenar Tareas',
+                            subtitulo:
+                                'Permite arrastrar tareas entre las columnas',
+                            valor: esAdminSeleccionado || isOwner
+                                ? true
+                                : permisosTemp.moverTareas,
+                            deshabilitado:
+                                !puedeEditar || esAdminSeleccionado || isOwner,
+                            onChanged: (v) => setModalState(() =>
+                                permisosTemp =
+                                    permisosTemp.copyWith(moverTareas: v)),
+                          ),
+                          const Divider(height: 1),
+                          _switchPermiso(
+                            titulo: 'Editar Tareas',
+                            subtitulo:
+                                'Modificar título, descripción, prioridad y fecha',
+                            valor: esAdminSeleccionado || isOwner
+                                ? true
+                                : permisosTemp.editarTareas,
+                            deshabilitado:
+                                !puedeEditar || esAdminSeleccionado || isOwner,
+                            onChanged: (v) => setModalState(() =>
+                                permisosTemp =
+                                    permisosTemp.copyWith(editarTareas: v)),
+                          ),
+                          const Divider(height: 1),
+                          _switchPermiso(
+                            titulo: 'Eliminar y Archivar Tareas',
+                            subtitulo: 'Permite eliminar tareas del tablero',
+                            valor: esAdminSeleccionado || isOwner
+                                ? true
+                                : permisosTemp.eliminarTareas,
+                            deshabilitado:
+                                !puedeEditar || esAdminSeleccionado || isOwner,
+                            onChanged: (v) => setModalState(() =>
+                                permisosTemp =
+                                    permisosTemp.copyWith(eliminarTareas: v)),
+                          ),
+                          _encabezadoGrupoPermisos('Módulos y Configuración',
+                              Icons.grid_view_rounded),
+                          _switchPermiso(
+                            titulo: 'Gestionar Módulos',
+                            subtitulo:
+                                'Acceso al Calendario, Notas y Recordatorios',
+                            valor: esAdminSeleccionado || isOwner
+                                ? true
+                                : permisosTemp.gestionarModulos,
+                            deshabilitado:
+                                !puedeEditar || esAdminSeleccionado || isOwner,
+                            onChanged: (v) => setModalState(() =>
+                                permisosTemp =
+                                    permisosTemp.copyWith(gestionarModulos: v)),
+                          ),
+                          const Divider(height: 1),
+                          _switchPermiso(
+                            titulo: 'Editar Configuración del Tablero',
+                            subtitulo:
+                                'Cambiar nombre, descripción y opciones generales',
+                            valor: esAdminSeleccionado || isOwner
+                                ? true
+                                : permisosTemp.editarTablero,
+                            deshabilitado:
+                                !puedeEditar || esAdminSeleccionado || isOwner,
+                            onChanged: (v) => setModalState(() =>
+                                permisosTemp =
+                                    permisosTemp.copyWith(editarTablero: v)),
+                          ),
+                          _encabezadoGrupoPermisos(
+                              'Gestión del Equipo', Icons.badge_outlined),
+                          _switchPermiso(
+                            titulo: 'Administrar Miembros',
+                            subtitulo:
+                                'Invitar integrantes y ajustar permisos regulares',
+                            valor: esAdminSeleccionado || isOwner
+                                ? true
+                                : permisosTemp.administrarMiembros,
+                            deshabilitado:
+                                !puedeEditar || esAdminSeleccionado || isOwner,
+                            onChanged: (v) => setModalState(() => permisosTemp =
+                                permisosTemp.copyWith(administrarMiembros: v)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // BOTÓN APLICAR PERMISOS
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: azulCielo,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
+                          elevation: 0,
+                        ),
+                        onPressed: puedeEditar
+                            ? () {
+                                setState(() {
+                                  _miembrosInfo[usuario.id] =
+                                      MiembroTableroInfo(
+                                    usuarioId: usuario.id,
+                                    rolKanban: rolKanbanSeleccionado,
+                                    esAdmin: esAdminSeleccionado,
+                                    permisos: esAdminSeleccionado
+                                        ? PermisosMiembro.todos
+                                        : permisosTemp,
+                                  );
+                                });
+                                Navigator.pop(context);
+                              }
+                            : () => Navigator.pop(context),
+                        child: Text(
+                          puedeEditar ? 'Aplicar Cambios' : 'Cerrar',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _encabezadoGrupoPermisos(String titulo, IconData icono) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      color: Colors.grey.shade100,
+      child: Row(
+        children: [
+          Icon(icono, size: 16, color: azulCielo),
+          const SizedBox(width: 6),
+          Text(
+            titulo,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E293B),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _switchPermiso({
+    required String titulo,
+    required String subtitulo,
+    required bool valor,
+    required bool deshabilitado,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return SwitchListTile(
+      dense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+      title: Text(titulo,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+      subtitle: Text(subtitulo,
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+      value: valor,
+      activeTrackColor: azulCielo,
+      onChanged: deshabilitado ? null : onChanged,
+    );
+  }
+
+  Widget _tarjetaSeccion({
+    required String titulo,
+    required IconData icono,
+    required Color colorHeader,
+    required Widget child,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icono, color: colorHeader, size: 22),
+              const SizedBox(width: 10),
+              Text(
+                titulo,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    color: Color(0xFF1E293B)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _chipInfo(
+      {required String label,
+      required String valor,
+      required IconData icono}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(icono, size: 16, color: Colors.grey.shade600),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label,
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 10)),
+              Text(valor,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11,
+                      color: Color(0xFF1E293B))),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _badge(
+      {required String texto,
+      required Color colorFondo,
+      required Color colorTexto,
+      required IconData icono}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: colorFondo,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icono, size: 12, color: colorTexto),
+          const SizedBox(width: 4),
+          Text(
+            texto,
+            style: TextStyle(
+                color: colorTexto, fontSize: 10, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+
+  InputDecoration _construirDecoracionInput(
+      {required String pista,
+      required IconData icono,
+      required Color colorFoco}) {
     return InputDecoration(
       hintText: pista,
       hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
@@ -302,74 +1215,75 @@ class _FormularioTableroState extends State<FormularioTablero> {
       filled: true,
       fillColor: Colors.grey.shade50,
       contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200, width: 1)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: colorFoco, width: 1.8)),
+      enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade200, width: 1)),
+      focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colorFoco, width: 1.8)),
     );
   }
 
   Future<void> _guardarTablero() async {
     if (_formKey.currentState!.validate()) {
-
       try {
-
         final uid = FirebaseAuth.instance.currentUser!.uid;
 
-        final doc = FirebaseFirestore.instance
-            .collection('tableros')
-            .doc();
+        final doc = FirebaseFirestore.instance.collection('tableros').doc();
+
+        final creadorIdFinal = widget.tablero?.creadorId ?? uid;
+
+        List<String> miembrosFinales =
+            _miembrosSeleccionados.map((u) => u.id).toList();
+        if (!miembrosFinales.contains(creadorIdFinal)) {
+          miembrosFinales.add(creadorIdFinal);
+        }
+
+        if (!_miembrosInfo.containsKey(creadorIdFinal)) {
+          _miembrosInfo[creadorIdFinal] = MiembroTableroInfo(
+            usuarioId: creadorIdFinal,
+            rolKanban: 'Líder de Proyecto',
+            esAdmin: true,
+            permisos: PermisosMiembro.todos,
+          );
+        }
 
         final tablero = Tablero(
           id: widget.tablero?.id ?? doc.id,
           nombre: _nombreController.text.trim(),
           descripcion: _descripcionController.text.trim(),
           esGrupal: widget.esGrupal,
-          creadorId: widget.tablero?.creadorId ?? uid,
-
-          miembrosIds: widget.tablero != null
-              ? _miembrosSeleccionados.map((u) => u.id).toList()
-              : [uid, ..._miembrosSeleccionados.map((u) => u.id)],
-
+          creadorId: creadorIdFinal,
+          miembrosIds: miembrosFinales,
+          miembrosInfo: _miembrosInfo,
           fechaCreacion: widget.tablero?.fechaCreacion ?? DateTime.now(),
           tieneCalendario: _tieneCalendario,
           tieneNotas: _tieneNotas,
           tieneRecordatorios: _tieneRecordatorios,
-
-          fechaActualizacion: widget.tablero != null
-              ? DateTime.now()
-              : null,
+          fechaActualizacion: widget.tablero != null ? DateTime.now() : null,
         );
 
-        print("PASO 1: antes de guardar");
-
         if (widget.tablero == null) {
-
           await _firestoreService.crearTableroConId(tablero);
-
         } else {
-
           await _firestoreService.actualizarTablero(tablero);
-
         }
-        print("PASO 2: después de guardar");
 
         if (!mounted) return;
-
-        print("PASO 3: antes de regresar");
-
         Navigator.of(context).pop(true);
-
-        print("PASO 4: después de regresar");
-
       } catch (e) {
-
-        print("ERROR: $e");
-
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error al guardar tablero: $e')),
+          );
+        }
       }
     }
   }
+
   Future<void> _agregarMiembro() async {
     final TextEditingController emailController = TextEditingController();
-    final _dialogFormKey = GlobalKey<FormState>();
+    final dialogFormKey = GlobalKey<FormState>();
     String rolSeleccionado = 'Programador / Desarrollador';
 
     showDialog(
@@ -379,21 +1293,26 @@ class _FormularioTableroState extends State<FormularioTablero> {
           builder: (context, setDialogState) {
             return AlertDialog(
               title: const Text("Invitar Miembro por Correo"),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
               content: SingleChildScrollView(
                 child: Form(
-                  key: _dialogFormKey,
+                  key: dialogFormKey,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Correo Institucional:', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const Text('Correo Institucional:',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 13)),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: emailController,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           hintText: 'ejemplo@e.uttecamac.edu.mx',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.email_outlined),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          prefixIcon: const Icon(Icons.email_outlined),
                         ),
                         keyboardType: TextInputType.emailAddress,
                         validator: (value) {
@@ -407,25 +1326,28 @@ class _FormularioTableroState extends State<FormularioTablero> {
                         },
                       ),
                       const SizedBox(height: 16),
-                      const Text('Rol / Rol Kanban en el Tablero:', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const Text('Rol Kanban Inicial:',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 13)),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
-                        value: rolSeleccionado,
-                        decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
+                        initialValue: rolSeleccionado,
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
                         ),
-                        items: const [
-                          DropdownMenuItem(value: 'Líder de Proyecto', child: Text('Líder de Proyecto')),
-                          DropdownMenuItem(value: 'Programador / Desarrollador', child: Text('Programador / Desarrollador')),
-                          DropdownMenuItem(value: 'Tester / QA', child: Text('Tester / QA')),
-                          DropdownMenuItem(value: 'Diseñador UI/UX', child: Text('Diseñador UI/UX')),
-                          DropdownMenuItem(value: 'Analista', child: Text('Analista')),
-                        ],
+                        items: _rolesKanbanDisponibles.map((rol) {
+                          return DropdownMenuItem<String>(
+                            value: rol,
+                            child: Text(rol,
+                                style: const TextStyle(fontSize: 13)),
+                          );
+                        }).toList(),
                         onChanged: (value) {
                           if (value != null) {
-                            setDialogState(() {
-                              rolSeleccionado = value;
-                            });
+                            setDialogState(() => rolSeleccionado = value);
                           }
                         },
                       ),
@@ -439,40 +1361,47 @@ class _FormularioTableroState extends State<FormularioTablero> {
                   child: const Text('Cancelar'),
                 ),
                 ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: azulCielo,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
                   onPressed: () async {
-                    if (_dialogFormKey.currentState!.validate()) {
+                    if (dialogFormKey.currentState!.validate()) {
                       final email = emailController.text.trim();
-                      
-                      // Buscar usuario en Firestore por email
-                      final usuario = await _firestoreService.obtenerUsuarioPorEmail(email);
-                      
+                      final usuario =
+                          await _firestoreService.obtenerUsuarioPorEmail(email);
+
                       if (usuario == null) {
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Usuario no encontrado en la base de datos')),
+                          const SnackBar(
+                              content: Text(
+                                  'Usuario no encontrado en la base de datos')),
                         );
                         return;
                       }
 
-                      // Asignar el rol seleccionado temporalmente para guardarlo o mostrarlo
-                      // (Opcional, el usuario ya tiene un campo de rol por defecto)
-                      final usuarioConRol = usuario.copyWith(rol: rolSeleccionado);
-
                       setState(() {
-                        if (!_miembrosSeleccionados.any((u) => u.id == usuarioConRol.id)) {
-                          _miembrosSeleccionados.add(usuarioConRol);
-                        } else {
-                          // Si ya existe, actualizamos su rol en la lista
-                          int index = _miembrosSeleccionados.indexWhere((u) => u.id == usuarioConRol.id);
-                          _miembrosSeleccionados[index] = usuarioConRol;
+                        if (!_miembrosSeleccionados
+                            .any((u) => u.id == usuario.id)) {
+                          _miembrosSeleccionados.add(usuario);
                         }
+                        _miembrosInfo[usuario.id] = MiembroTableroInfo(
+                          usuarioId: usuario.id,
+                          rolKanban: rolSeleccionado,
+                          esAdmin: false,
+                          permisos: const PermisosMiembro(),
+                        );
                       });
 
                       if (!context.mounted) return;
                       Navigator.pop(context);
                     }
                   },
-                  child: const Text('Invitar'),
+                  child: const Text('Invitar',
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
               ],
             );
@@ -481,26 +1410,36 @@ class _FormularioTableroState extends State<FormularioTablero> {
       },
     );
   }
+
+  Future<void> _cargarCreadorActual() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      final usuario = await _firestoreService.obtenerUsuarioPorId(uid);
+      if (usuario != null && mounted) {
+        setState(() {
+          if (!_miembrosSeleccionados.any((u) => u.id == usuario.id)) {
+            _miembrosSeleccionados.add(usuario);
+          }
+        });
+      }
+    }
+  }
+
   Future<void> _cargarMiembros() async {
-
     final ids = widget.tablero!.miembrosIds;
-
     List<Usuario> usuarios = [];
 
     for (String id in ids) {
-
-      final usuario =
-      await _firestoreService.obtenerUsuarioPorId(id);
-
-      if(usuario != null){
+      final usuario = await _firestoreService.obtenerUsuarioPorId(id);
+      if (usuario != null) {
         usuarios.add(usuario);
       }
-
     }
 
-    setState(() {
-      _miembrosSeleccionados = usuarios;
-    });
-
+    if (mounted) {
+      setState(() {
+        _miembrosSeleccionados = usuarios;
+      });
+    }
   }
 }
