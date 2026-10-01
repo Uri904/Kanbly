@@ -400,9 +400,9 @@ class _MisTablerosState extends State<MisTableros> {
                   final tareas = snapshot.data ?? [];
 
                   // Contamos cuántas tareas hay en cada columna
-                  final porHacer = tareas.where((t) => t.estado == EstadoTarea.pendiente).length;
-                  final enProgreso = tareas.where((t) => t.estado == EstadoTarea.enProgreso).length;
-                  final hecho = tareas.where((t) => t.estado == EstadoTarea.completada).length;
+                  final porHacer = tareas.where((t) => t.estadoNombre == 'Pendiente' || t.estado == EstadoTarea.pendiente).length;
+                  final enProgreso = tareas.where((t) => t.estadoNombre == 'En progreso' || t.estado == EstadoTarea.enProgreso).length;
+                  final hecho = tareas.where((t) => t.estadoNombre == 'Completada' || t.estado == EstadoTarea.completada || t.estadoNombre == 'Hecho').length;
 
                   return Row(
                     children: [

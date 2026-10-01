@@ -6,13 +6,27 @@ class FormatoUtil {
   static Color obtenerColorPorPrioridad(int prioridad) {
     switch (prioridad) {
       case 3:
-        return const Color(0xFF63D0A1); // Alta -> Verde Turquesa
+        return const Color(0xFFE53E3E); // Alta -> Rojo / Coral
       case 2:
-        return const Color(0xFF37B5F4); // Media -> Azul Claro
+        return const Color(0xFFED8936); // Media -> Naranja / Ámbar
       case 1:
-        return const Color(0xFF63B09C); // Baja -> Verde Agua
+        return const Color(0xFF38A169); // Baja -> Verde
       default:
-        return const Color(0xFF37B5F4);
+        return const Color(0xFFED8936);
+    }
+  }
+
+  // Texto legible para el nivel de importancia / prioridad
+  static String obtenerTextoPrioridad(int prioridad) {
+    switch (prioridad) {
+      case 3:
+        return 'Alta';
+      case 2:
+        return 'Media';
+      case 1:
+        return 'Baja';
+      default:
+        return 'Media';
     }
   }
 

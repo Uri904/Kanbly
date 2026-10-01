@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 // --- IMPORTS DE LOS MODELOS Y SERVICIOS DEL EQUIPO ---
 import '../modelo/tarea.dart';
 import '../modelo/tablero.dart';
+import '../modelo/usuario.dart';
 import '../servicios/firestore_service.dart';
 
 class FormularioTarea extends StatefulWidget {
@@ -26,17 +27,51 @@ class _FormularioTareaState extends State<FormularioTarea> {
   final _formKey = GlobalKey<FormState>();
   final _tituloController = TextEditingController();
   final _descController = TextEditingController();
+  final FirestoreService _firestoreService = FirestoreService();
 
   // Variables de estado del formulario
-  late EstadoTarea _estadoSeleccionado;
+  late List<String> _columnasDisponibles;
+  late String _columnaSeleccionada;
   int _prioridadSeleccionada = 2; // 1 = Baja, 2 = Media, 3 = Alta
   DateTime? _fechaVencimiento;
+  String? _asignadoA; // ID del integrante asignado
+  List<Usuario> _miembrosEquipo = [];
+  bool _cargandoMiembros = false;
   bool _guardando = false; // Para mostrar indicador de carga
 
   @override
   void initState() {
     super.initState();
-    _estadoSeleccionado = widget.estadoInicial;
+    _columnasDisponibles = widget.tablero.columnas.isNotEmpty
+        ? widget.tablero.columnas
+        : const ['Pendiente', 'En progreso', 'Completada'];
+
+    if (_columnasDisponibles.contains(widget.estadoInicial.value)) {
+      _columnaSeleccionada = widget.estadoInicial.value;
+    } else {
+      _columnaSeleccionada = _columnasDisponibles.first;
+    }
+
+    if (widget.tablero.esGrupal || widget.tablero.miembrosIds.isNotEmpty) {
+      _cargarMiembrosTablero();
+    }
+  }
+
+  Future<void> _cargarMiembrosTablero() async {
+    setState(() => _cargandoMiembros = true);
+    List<Usuario> lista = [];
+    for (String id in widget.tablero.miembrosIds) {
+      final u = await _firestoreService.obtenerUsuarioPorId(id);
+      if (u != null) {
+        lista.add(u);
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _miembrosEquipo = lista;
+        _cargandoMiembros = false;
+      });
+    }
   }
 
   @override
@@ -48,15 +83,14 @@ class _FormularioTareaState extends State<FormularioTarea> {
 
   @override
   Widget build(BuildContext context) {
-    // Paleta de colores oficial de Kanbly
     const Color textoPrincipal = Color(0xFF1E293B);
     const Color azulCielo = Color(0xFF52ABEB);
     const Color verdeTurquesa = Color(0xFF63D0A1);
-    const Color azulClaro = Color(0xFF37B5F4);
-    const Color verdeAgua = Color(0xFF63B09C);
+    const Color rojoAlta = Color(0xFFE53E3E);
+    const Color naranjaMedia = Color(0xFFED8936);
+    const Color verdeBaja = Color(0xFF38A169);
 
     return Padding(
-      // Evita que el teclado virtual tape el formulario
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
         left: 24,
@@ -126,24 +160,64 @@ class _FormularioTareaState extends State<FormularioTarea> {
               ),
               const SizedBox(height: 14),
 
-              // --- SELECTOR: COLUMNA / ESTADO ---
-              DropdownButtonFormField<EstadoTarea>(
-                value: _estadoSeleccionado,
+              // --- SELECTOR: COLUMNA / ESTADO (PERSONALIZABLE) ---
+              DropdownButtonFormField<String>(
+                value: _columnaSeleccionada,
                 decoration: InputDecoration(
                   labelText: 'Columna inicial',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                items: EstadoTarea.values.map((estado) {
+                items: _columnasDisponibles.map((colNombre) {
                   return DropdownMenuItem(
-                    value: estado,
-                    child: Text(estado.value), // Devuelve 'Pendiente', 'En progreso', etc.
+                    value: colNombre,
+                    child: Text(colNombre, style: const TextStyle(fontWeight: FontWeight.w600)),
                   );
                 }).toList(),
                 onChanged: (val) {
-                  if (val != null) setState(() => _estadoSeleccionado = val);
+                  if (val != null) setState(() => _columnaSeleccionada = val);
                 },
               ),
               const SizedBox(height: 14),
+
+              // --- ASIGNACIÓN DE INTEGRANTE EN TABLEROS DE EQUIPO ---
+              if (widget.tablero.esGrupal || widget.tablero.miembrosIds.isNotEmpty) ...[
+                if (_cargandoMiembros)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8.0),
+                    child: LinearProgressIndicator(),
+                  )
+                else
+                  DropdownButtonFormField<String?>(
+                    value: _asignadoA,
+                    decoration: InputDecoration(
+                      labelText: 'Asignar a integrante del equipo',
+                      prefixIcon: const Icon(Icons.person_add_outlined, color: azulCielo),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Sin asignar', style: TextStyle(color: Colors.grey)),
+                      ),
+                      ..._miembrosEquipo.map((miembro) {
+                        final infoRole = widget.tablero.miembrosInfo[miembro.id]?.rolKanban ?? miembro.rol;
+                        return DropdownMenuItem<String?>(
+                          value: miembro.id,
+                          child: Text(
+                            '${miembro.nombreCompleto} ($infoRole)',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                        );
+                      }),
+                    ],
+                    onChanged: (val) {
+                      setState(() => _asignadoA = val);
+                    },
+                  ),
+                const SizedBox(height: 14),
+              ],
 
               // --- BOTÓN: FECHA DE VENCIMIENTO ---
               OutlinedButton.icon(
@@ -173,17 +247,17 @@ class _FormularioTareaState extends State<FormularioTarea> {
               ),
               const SizedBox(height: 16),
 
-              // --- SELECTOR: PRIORIDAD ---
+              // --- SELECTOR: PRIORIDAD (NIVEL DE IMPORTANCIA) ---
               Text(
-                'Prioridad:',
+                'Nivel de Importancia (Prioridad):',
                 style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: textoPrincipal),
               ),
               const SizedBox(height: 8),
               Row(
                 children: [
-                  _botonPrioridad(1, 'Baja', verdeAgua),     // #63B09C
-                  _botonPrioridad(2, 'Media', azulClaro),    // #37B5F4
-                  _botonPrioridad(3, 'Alta', verdeTurquesa), // #63D0A1
+                  _botonPrioridad(1, 'Baja', verdeBaja),
+                  _botonPrioridad(2, 'Media', naranjaMedia),
+                  _botonPrioridad(3, 'Alta', rojoAlta),
                 ],
               ),
               const SizedBox(height: 24),
@@ -201,18 +275,18 @@ class _FormularioTareaState extends State<FormularioTarea> {
                   onPressed: _guardando ? null : _guardarNuevaTarea,
                   child: _guardando
                       ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
-                  )
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                        )
                       : Text(
-                    'Crear Tarea',
-                    style: GoogleFonts.inter(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                          'Crear Tarea',
+                          style: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                 ),
               ),
               const SizedBox(height: 24),
@@ -233,7 +307,7 @@ class _FormularioTareaState extends State<FormularioTarea> {
           margin: const EdgeInsets.symmetric(horizontal: 4),
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: activo ? color : color.withOpacity(0.1),
+            color: activo ? color : color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: color, width: activo ? 2 : 1),
           ),
@@ -257,17 +331,38 @@ class _FormularioTareaState extends State<FormularioTarea> {
       setState(() => _guardando = true);
 
       try {
-        final firestoreService = FirestoreService();
         final userId = FirebaseAuth.instance.currentUser?.uid ?? 'usuario_anonimo';
 
-        // 1. Instanciamos el modelo Tarea con los datos del formulario
+        // 1. Verificar el límite de 10 tareas por columna
+        final tareasActuales = await _firestoreService.obtenerTareasDeTablero(widget.tablero.id);
+        final tareasEnColumna = tareasActuales.where((t) {
+          return t.estadoNombre == _columnaSeleccionada || t.estado.value == _columnaSeleccionada;
+        }).length;
+
+        if (tareasEnColumna >= 10) {
+          if (mounted) {
+            setState(() => _guardando = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Límite alcanzado: La columna "$_columnaSeleccionada" ya tiene el máximo de 10 tareas.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+          return;
+        }
+
+        // 2. Instanciamos el modelo Tarea con los datos del formulario
+        final enumEstado = EstadoTareaExtension.fromString(_columnaSeleccionada);
         final nuevaTarea = Tarea(
-          id: FirebaseFirestore.instance.collection('tareas').doc().id, // ID autogenerado
+          id: FirebaseFirestore.instance.collection('tareas').doc().id,
           titulo: _tituloController.text.trim(),
           descripcion: _descController.text.trim().isEmpty ? null : _descController.text.trim(),
-          estado: _estadoSeleccionado,
+          estado: enumEstado,
+          estadoNombre: _columnaSeleccionada,
           orden: 0,
           tableroId: widget.tablero.id,
+          asignadoA: _asignadoA,
           fechaCreacion: DateTime.now(),
           fechaVencimiento: _fechaVencimiento,
           prioridad: _prioridadSeleccionada,
@@ -275,10 +370,9 @@ class _FormularioTareaState extends State<FormularioTarea> {
           creadaPor: userId,
         );
 
-        // 2. Subimos la tarea a la base de datos de Firebase
-        await firestoreService.crearTareaConId(nuevaTarea);
+        // 3. Subimos la tarea a Firestore
+        await _firestoreService.crearTareaConId(nuevaTarea);
 
-        // 3. Cerramos el modal solo si el widget sigue activo en pantalla
         if (mounted) {
           Navigator.pop(context, nuevaTarea);
         }

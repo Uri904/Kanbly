@@ -248,53 +248,44 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                     }
                   });
 
-                  // D. Filtrado por columnas usando el Enum oficial de la clase Tarea
-                  final pendientes = todasLasTareas.where((t) => t.estado == EstadoTarea.pendiente).toList();
-                  final enProgreso = todasLasTareas.where((t) => t.estado == EstadoTarea.enProgreso).toList();
-                  final completadas = todasLasTareas.where((t) => t.estado == EstadoTarea.completada).toList();
-                  final bloqueadas = todasLasTareas.where((t) => t.estado == EstadoTarea.bloqueada).toList();
+                  // D. Filtrado por columnas usando las columnas personalizadas del tablero
+                  final columnasList = widget.tablero?.columnas.isNotEmpty == true
+                      ? widget.tablero!.columnas
+                      : const ['Pendiente', 'En progreso', 'Completada'];
+
+                  const List<Color> paletaColoresHeaders = [
+                    Color(0xFF1E293B), // Oscuro / Por Hacer
+                    Color(0xFF52ABEB), // Azul / En Progreso
+                    Color(0xFF63D0A1), // Verde Turquesa / Completada
+                    Color(0xFFE53E3E), // Rojo / Bloqueada
+                    Color(0xFF8B5CF6), // Morado
+                    Color(0xFFF59E0B), // Naranja / Ámbar
+                    Color(0xFF10B981), // Esmeralda
+                  ];
 
                   return SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // --- COLUMNA 1: POR HACER (PENDIENTE) ---
-                        _construirColumna(
-                          titulo: 'POR HACER',
-                          estado: EstadoTarea.pendiente,
-                          tareas: pendientes,
-                          colorHeader: const Color(0xFF1E293B),
-                        ),
-                        const SizedBox(width: 16),
+                      children: columnasList.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final colNombre = entry.value;
+                        final tareasColumna = todasLasTareas.where((t) {
+                          return t.estadoNombre == colNombre || t.estado.value == colNombre;
+                        }).toList();
+                        final colorHeader = paletaColoresHeaders[index % paletaColoresHeaders.length];
 
-                        // --- COLUMNA 2: EN PROGRESO ---
-                        _construirColumna(
-                          titulo: 'EN PROGRESO',
-                          estado: EstadoTarea.enProgreso,
-                          tareas: enProgreso,
-                          colorHeader: const Color(0xFF63B09C),
-                        ),
-                        const SizedBox(width: 16),
-
-                        // --- COLUMNA 3: COMPLETADA (HECHO) ---
-                        _construirColumna(
-                          titulo: 'COMPLETADA',
-                          estado: EstadoTarea.completada,
-                          tareas: completadas,
-                          colorHeader: const Color(0xFF63D0A1),
-                        ),
-                        const SizedBox(width: 16),
-
-                        // --- COLUMNA 4: BLOQUEADA ---
-                        _construirColumna(
-                          titulo: 'BLOQUEADA',
-                          estado: EstadoTarea.bloqueada,
-                          tareas: bloqueadas,
-                          colorHeader: const Color(0xFFE53E3E),
-                        ),
-                      ],
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 16),
+                          child: _construirColumna(
+                            titulo: colNombre.toUpperCase(),
+                            estadoNombre: colNombre,
+                            tareas: tareasColumna,
+                            colorHeader: colorHeader,
+                          ),
+                        );
+                      }).toList(),
                     ),
                   );
                 },
@@ -311,7 +302,7 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
   // Constructor dinámico de columnas
   Widget _construirColumna({
     required String titulo,
-    required EstadoTarea estado,
+    required String estadoNombre,
     required List<Tarea> tareas,
     required Color colorHeader,
   }) {
@@ -332,9 +323,20 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
           return;
         }
         final tarea = details.data;
-        if (tarea.estado != estado) {
+        if (tarea.estadoNombre != estadoNombre && tarea.estado.value != estadoNombre) {
+          if (tareas.length >= 10) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Límite alcanzado: La columna "$titulo" ya tiene el máximo de 10 tareas.'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            }
+            return;
+          }
           try {
-            await _firestoreService.actualizarEstadoTarea(tarea.id, estado.value);
+            await _firestoreService.actualizarEstadoTarea(tarea.id, estadoNombre);
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -372,95 +374,107 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Encabezado con el conteo real dinámico
+              // Encabezado con el conteo (límite de 10)
               ColumnHeaderWidget(
-                count: '${tareas.length}',
+                count: '${tareas.length}/10',
                 title: titulo,
                 colorHeader: colorHeader,
               ),
               const SizedBox(height: 12),
 
-              // Lista de tarjetas o mensaje de columna vacía
-              if (tareas.isEmpty)
-                Container(
-                  height: 100,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: isHovered ? colorHeader : Colors.grey.shade300,
-                      style: BorderStyle.none,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    isHovered ? 'Soltar aquí' : 'Sin tareas en esta columna',
-                    style: TextStyle(
-                      color: isHovered ? colorHeader : Colors.grey.shade400,
-                      fontWeight: isHovered ? FontWeight.bold : FontWeight.normal,
-                      fontSize: 12,
-                    ),
-                  ),
-                )
-              else
-                ...tareas.map((tarea) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: LongPressDraggable<Tarea>(
-                    data: tarea,
-                    maxSimultaneousDrags: permisos.moverTareas ? 1 : 0,
-                    delay: const Duration(milliseconds: 150),
-                    hapticFeedbackOnStart: true,
-                    axis: null,
-                    feedback: Material(
-                      type: MaterialType.transparency,
-                      child: Transform.scale(
-                        scale: 1.03,
-                        child: SizedBox(
-                          width: 280,
-                          child: TaskCardWidget(
-                            title: tarea.titulo,
-                            desc: tarea.descripcion ?? '',
-                            date: _formatearFecha(tarea.fechaVencimiento),
-                            labelColor: FormatoUtil.obtenerColorPorPrioridad(tarea.prioridad),
-                            initials: 'TA',
+              // Contenedor scrollable exclusivo de la columna
+              SizedBox(
+                height: 500,
+                child: tareas.isEmpty
+                    ? Container(
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: isHovered ? colorHeader : Colors.grey.shade300,
+                            style: BorderStyle.none,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          isHovered ? 'Soltar aquí' : 'Sin tareas en esta columna',
+                          style: TextStyle(
+                            color: isHovered ? colorHeader : Colors.grey.shade400,
+                            fontWeight: isHovered ? FontWeight.bold : FontWeight.normal,
+                            fontSize: 12,
                           ),
                         ),
+                      )
+                    : SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        child: Column(
+                          children: tareas.map((tarea) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: LongPressDraggable<Tarea>(
+                              data: tarea,
+                              maxSimultaneousDrags: permisos.moverTareas ? 1 : 0,
+                              delay: const Duration(milliseconds: 150),
+                              hapticFeedbackOnStart: true,
+                              axis: null,
+                              feedback: Material(
+                                type: MaterialType.transparency,
+                                child: Transform.scale(
+                                  scale: 1.03,
+                                  child: SizedBox(
+                                    width: 280,
+                                    child: TaskCardWidget(
+                                      title: tarea.titulo,
+                                      desc: tarea.descripcion ?? '',
+                                      date: _formatearFecha(tarea.fechaVencimiento),
+                                      labelColor: FormatoUtil.obtenerColorPorPrioridad(tarea.prioridad),
+                                      prioridad: tarea.prioridad,
+                                      asignadoA: tarea.asignadoA,
+                                      tablero: widget.tablero,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              childWhenDragging: Opacity(
+                                opacity: 0.3,
+                                child: TaskCardWidget(
+                                  title: tarea.titulo,
+                                  desc: tarea.descripcion ?? '',
+                                  date: _formatearFecha(tarea.fechaVencimiento),
+                                  labelColor: FormatoUtil.obtenerColorPorPrioridad(tarea.prioridad),
+                                  prioridad: tarea.prioridad,
+                                  asignadoA: tarea.asignadoA,
+                                  tablero: widget.tablero,
+                                ),
+                              ),
+                              child: GestureDetector(
+                                onTap: () {
+                                  showModalBottomSheet(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    backgroundColor: Colors.white,
+                                    shape: const RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                                    ),
+                                    builder: (context) => DetalleTareaWidget(
+                                      tarea: tarea,
+                                      tablero: widget.tablero,
+                                    ),
+                                  );
+                                },
+                                child: TaskCardWidget(
+                                  title: tarea.titulo,
+                                  desc: tarea.descripcion ?? 'Sin descripción adicional',
+                                  date: _formatearFecha(tarea.fechaVencimiento),
+                                  labelColor: FormatoUtil.obtenerColorPorPrioridad(tarea.prioridad),
+                                  prioridad: tarea.prioridad,
+                                  asignadoA: tarea.asignadoA,
+                                  tablero: widget.tablero,
+                                ),
+                              ),
+                            ),
+                          )).toList(),
+                        ),
                       ),
-                    ),
-                    childWhenDragging: Opacity(
-                      opacity: 0.3,
-                      child: TaskCardWidget(
-                        title: tarea.titulo,
-                        desc: tarea.descripcion ?? '',
-                        date: _formatearFecha(tarea.fechaVencimiento),
-                        labelColor: FormatoUtil.obtenerColorPorPrioridad(tarea.prioridad),
-                        initials: 'TA',
-                      ),
-                    ),
-                    child: GestureDetector(
-                      onTap: () {
-                        showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          backgroundColor: Colors.white,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                          ),
-                          builder: (context) => DetalleTareaWidget(
-                            tarea: tarea,
-                            tablero: widget.tablero,
-                          ),
-                        );
-                      },
-                      child: TaskCardWidget(
-                        title: tarea.titulo,
-                        desc: tarea.descripcion ?? 'Sin descripción adicional',
-                        date: _formatearFecha(tarea.fechaVencimiento),
-                        labelColor: FormatoUtil.obtenerColorPorPrioridad(tarea.prioridad),
-                        initials: 'TA',
-                      ),
-                    ),
-                  ),
-                )),
+              ),
             ],
           ),
         );
@@ -715,6 +729,9 @@ class TaskCardWidget extends StatelessWidget {
   final String date;
   final String desc;
   final String initials;
+  final int prioridad;
+  final String? asignadoA;
+  final Tablero? tablero;
   final Color labelColor;
   final String title;
 
@@ -722,52 +739,86 @@ class TaskCardWidget extends StatelessWidget {
     super.key,
     required this.date,
     required this.desc,
-    required this.initials,
+    this.initials = 'TA',
+    this.prioridad = 2,
+    this.asignadoA,
+    this.tablero,
     required this.labelColor,
     required this.title,
   });
 
   @override
   Widget build(BuildContext context) {
+    String inicialesMostrar = initials;
+    if (asignadoA != null && tablero != null && tablero!.miembrosInfo.containsKey(asignadoA)) {
+      final info = tablero!.miembrosInfo[asignadoA];
+      if (info != null && info.rolKanban.isNotEmpty) {
+        final partes = info.rolKanban.split(' ');
+        inicialesMostrar = partes.length >= 2
+            ? '${partes[0][0]}${partes[1][0]}'.toUpperCase()
+            : info.rolKanban.substring(0, 2).toUpperCase();
+      }
+    }
+
+    final textoPrioridad = FormatoUtil.obtenerTextoPrioridad(prioridad);
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade200, width: 1.2),
+        border: Border(
+          left: BorderSide(color: labelColor, width: 4.5),
+          top: BorderSide(color: Colors.grey.shade200, width: 1.2),
+          right: BorderSide(color: Colors.grey.shade200, width: 1.2),
+          bottom: BorderSide(color: Colors.grey.shade200, width: 1.2),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
+            color: labelColor.withValues(alpha: 0.08),
             blurRadius: 6,
             offset: const Offset(0, 3),
           ),
         ],
       ),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Row superior: Prioridad y Menú
+          // Row superior: Chip de Prioridad (Color según importancia) e Ícono de arrastre
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                width: 28,
-                height: 6,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: labelColor,
-                  borderRadius: BorderRadius.circular(4),
+                  color: labelColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: labelColor.withValues(alpha: 0.5), width: 1),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.flag_rounded, size: 11, color: labelColor),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Prioridad $textoPrioridad',
+                      style: TextStyle(
+                        color: labelColor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const Row(
                 children: [
-                  Icon(Icons.drag_indicator_rounded, color: Colors.grey, size: 20),
-                  SizedBox(width: 4),
-                  Icon(Icons.more_horiz_rounded, color: Colors.grey, size: 18),
+                  Icon(Icons.drag_indicator_rounded, color: Colors.grey, size: 18),
                 ],
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
 
           // Título y Descripción
           Text(
@@ -787,17 +838,17 @@ class TaskCardWidget extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(color: Colors.grey.shade600, fontSize: 11, height: 1.3),
           ),
-          const SizedBox(height: 12),
-          Divider(height: 1, thickness: 1, color: Colors.grey.shade100),
           const SizedBox(height: 10),
+          Divider(height: 1, thickness: 1, color: Colors.grey.shade100),
+          const SizedBox(height: 8),
 
-          // Row inferior: Fecha y Avatar
+          // Row inferior: Fecha y Asignado (Avatar)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
                 children: [
-                  Icon(Icons.access_time_rounded, color: Colors.grey.shade500, size: 13),
+                  Icon(Icons.access_time_rounded, color: Colors.grey.shade500, size: 12),
                   const SizedBox(width: 4),
                   Text(
                     date,
@@ -805,18 +856,53 @@ class TaskCardWidget extends StatelessWidget {
                   ),
                 ],
               ),
-              CircleAvatar(
-                radius: 12,
-                backgroundColor: const Color(0xFF1E293B),
-                child: Text(
-                  initials,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
+              if (tablero?.esGrupal == true)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: asignadoA != null ? const Color(0xFF52ABEB).withValues(alpha: 0.12) : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircleAvatar(
+                        radius: 9,
+                        backgroundColor: asignadoA != null ? const Color(0xFF52ABEB) : Colors.grey.shade400,
+                        child: Text(
+                          inicialesMostrar,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 7,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        asignadoA != null ? 'Asignado' : 'Sin asignar',
+                        style: TextStyle(
+                          color: asignadoA != null ? const Color(0xFF52ABEB) : Colors.grey.shade600,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                CircleAvatar(
+                  radius: 11,
+                  backgroundColor: const Color(0xFF1E293B),
+                  child: Text(
+                    inicialesMostrar,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
         ],

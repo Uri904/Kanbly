@@ -33,6 +33,9 @@ class _FormularioTableroState extends State<FormularioTablero>
   List<Map<String, dynamic>> _invitacionesPendientes = [];
   String _fechaActualizacion = 'Sin actualizar';
 
+  // Columnas personalizadas del tablero
+  List<String> _columnas = ['Pendiente', 'En progreso', 'Completada'];
+
   // Módulos del tablero
   bool _tieneCalendario = true;
   bool _tieneNotas = true;
@@ -66,6 +69,11 @@ class _FormularioTableroState extends State<FormularioTablero>
       _tieneNotas = widget.tablero!.tieneNotas;
       _tieneRecordatorios = widget.tablero!.tieneRecordatorios;
       _miembrosInfo = Map.from(widget.tablero!.miembrosInfo);
+      _columnas = List<String>.from(
+        widget.tablero!.columnas.isNotEmpty
+            ? widget.tablero!.columnas
+            : ['Pendiente', 'En progreso', 'Completada'],
+      );
 
       if (widget.tablero!.fechaActualizacion != null) {
         _fechaActualizacion = widget.tablero!.fechaActualizacion!
@@ -282,6 +290,10 @@ class _FormularioTableroState extends State<FormularioTablero>
         ),
         const SizedBox(height: 20),
 
+        // SECCIÓN DE PERSONALIZACIÓN DE COLUMNAS
+        _construirSeccionColumnas(colorTema),
+        const SizedBox(height: 20),
+
         // TARJETA DE MÓDULOS ACTIVOS
         _tarjetaSeccion(
           titulo: 'Módulos Adicionales',
@@ -381,6 +393,202 @@ class _FormularioTableroState extends State<FormularioTablero>
       activeTrackColor: colorTema,
       value: valor,
       onChanged: onChanged,
+    );
+  }
+
+  Widget _construirSeccionColumnas(Color colorTema) {
+    return _tarjetaSeccion(
+      titulo: 'Personalización del Tablero (Columnas)',
+      icono: Icons.view_column_rounded,
+      colorHeader: colorTema,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Personaliza las columnas de tu tablero según tus necesidades (por defecto: Pendiente, En progreso, Completada):',
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+          ),
+          const SizedBox(height: 14),
+          ..._columnas.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final colNombre = entry.value;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 26,
+                    height: 26,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: colorTema.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      '${idx + 1}',
+                      style: TextStyle(
+                        color: colorTema,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      colNombre,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.blue),
+                    tooltip: 'Editar nombre',
+                    onPressed: () => _dialogEditarColumna(idx),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline_rounded, size: 20, color: Colors.redAccent),
+                    tooltip: 'Eliminar columna',
+                    onPressed: _columnas.length <= 1
+                        ? null
+                        : () {
+                            setState(() {
+                              _columnas.removeAt(idx);
+                            });
+                          },
+                  ),
+                ],
+              ),
+            );
+          }),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _dialogAgregarColumna,
+                  icon: const Icon(Icons.add_rounded, size: 20),
+                  label: const Text('Agregar Columna', style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: colorTema,
+                    side: BorderSide(color: colorTema),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _columnas = ['Pendiente', 'En progreso', 'Completada'];
+                  });
+                },
+                child: const Text('Por defecto', style: TextStyle(fontSize: 12)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _dialogAgregarColumna() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Agregar Nueva Columna', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: 'Nombre de la columna',
+            hintText: 'Ej. Por Revisar, Bloqueada, QA...',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: azulCielo,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              final nombre = controller.text.trim();
+              if (nombre.isNotEmpty) {
+                if (_columnas.map((c) => c.toLowerCase()).contains(nombre.toLowerCase())) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Ya existe una columna con este nombre')),
+                  );
+                  return;
+                }
+                setState(() {
+                  _columnas.add(nombre);
+                });
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Agregar', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _dialogEditarColumna(int index) {
+    final controller = TextEditingController(text: _columnas[index]);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Editar Columna', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: 'Nombre de la columna',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: azulCielo,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              final nombre = controller.text.trim();
+              if (nombre.isNotEmpty) {
+                setState(() {
+                  _columnas[index] = nombre;
+                });
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Guardar', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1261,6 +1469,7 @@ class _FormularioTableroState extends State<FormularioTablero>
           tieneCalendario: _tieneCalendario,
           tieneNotas: _tieneNotas,
           tieneRecordatorios: _tieneRecordatorios,
+          columnas: _columnas.isNotEmpty ? _columnas : const ['Pendiente', 'En progreso', 'Completada'],
           fechaActualizacion: widget.tablero != null ? DateTime.now() : null,
         );
 

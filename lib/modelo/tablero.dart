@@ -159,6 +159,9 @@ class Tablero {
   final bool tieneNotas;
   final bool tieneRecordatorios;
 
+  /// Lista personalizada de columnas / estados para el tablero
+  final List<String> columnas;
+
   /// Configuración adicional
   final Map<String, dynamic>? configuracion;
 
@@ -177,6 +180,7 @@ class Tablero {
     this.tieneCalendario = true,
     this.tieneNotas = true,
     this.tieneRecordatorios = true,
+    this.columnas = const ['Pendiente', 'En progreso', 'Completada'],
     this.configuracion,
   });
 
@@ -209,6 +213,9 @@ class Tablero {
       tieneCalendario: map['tieneCalendario'] ?? true,
       tieneNotas: map['tieneNotas'] ?? true,
       tieneRecordatorios: map['tieneRecordatorios'] ?? true,
+      columnas: map['columnas'] != null
+          ? List<String>.from(map['columnas'])
+          : const ['Pendiente', 'En progreso', 'Completada'],
       configuracion: map['configuracion'] != null
           ? Map<String, dynamic>.from(map['configuracion'])
           : null,
@@ -237,6 +244,7 @@ class Tablero {
       'tieneCalendario': tieneCalendario,
       'tieneNotas': tieneNotas,
       'tieneRecordatorios': tieneRecordatorios,
+      'columnas': columnas,
       'configuracion': configuracion,
     };
   }
@@ -294,6 +302,7 @@ class Tablero {
     bool? tieneCalendario,
     bool? tieneNotas,
     bool? tieneRecordatorios,
+    List<String>? columnas,
     Map<String, dynamic>? configuracion,
   }) {
     return Tablero(
@@ -311,6 +320,7 @@ class Tablero {
       tieneCalendario: tieneCalendario ?? this.tieneCalendario,
       tieneNotas: tieneNotas ?? this.tieneNotas,
       tieneRecordatorios: tieneRecordatorios ?? this.tieneRecordatorios,
+      columnas: columnas ?? this.columnas,
       configuracion: configuracion ?? this.configuracion,
     );
   }

@@ -42,6 +42,7 @@ class Tarea {
   final String titulo;
   final String? descripcion;
   final EstadoTarea estado;
+  final String estadoNombre;
   final int orden;
   final String tableroId;
   final String? asignadoA;
@@ -59,6 +60,7 @@ class Tarea {
     required this.titulo,
     this.descripcion,
     this.estado = EstadoTarea.pendiente,
+    String? estadoNombre,
     this.orden = 0,
     required this.tableroId,
     this.asignadoA,
@@ -70,14 +72,16 @@ class Tarea {
     this.archivada = false,
     this.creadaPor,
     this.comentario,
-  });
+  }) : estadoNombre = estadoNombre ?? (estado.value);
 
   factory Tarea.fromMap(String id, Map<String, dynamic> map) {
+    final estadoStr = map['estado']?.toString() ?? 'Pendiente';
     return Tarea(
       id: id,
       titulo: map['titulo'] ?? 'Tarea sin título',
       descripcion: map['descripcion'],
-      estado: EstadoTareaExtension.fromString(map['estado'] ?? 'Pendiente'),
+      estado: EstadoTareaExtension.fromString(estadoStr),
+      estadoNombre: estadoStr,
       orden: map['orden'] ?? 0,
       tableroId: map['tableroId'] ?? '',
       asignadoA: map['asignadoA'],
@@ -96,7 +100,7 @@ class Tarea {
     return {
       'titulo': titulo,
       'descripcion': descripcion,
-      'estado': estado.value,
+      'estado': estadoNombre,
       'orden': orden,
       'tableroId': tableroId,
       'asignadoA': asignadoA,
@@ -120,6 +124,7 @@ class Tarea {
     String? titulo,
     String? descripcion,
     EstadoTarea? estado,
+    String? estadoNombre,
     int? orden,
     String? tableroId,
     String? asignadoA,
@@ -137,6 +142,7 @@ class Tarea {
       titulo: titulo ?? this.titulo,
       descripcion: descripcion ?? this.descripcion,
       estado: estado ?? this.estado,
+      estadoNombre: estadoNombre ?? (estado != null ? estado.value : this.estadoNombre),
       orden: orden ?? this.orden,
       tableroId: tableroId ?? this.tableroId,
       asignadoA: asignadoA ?? this.asignadoA,

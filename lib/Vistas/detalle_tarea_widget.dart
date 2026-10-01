@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 // --- IMPORTS DE LOS MODELOS Y SERVICIOS DEL EQUIPO ---
 import '../modelo/tarea.dart';
 import '../modelo/tablero.dart';
+import '../modelo/usuario.dart';
 import '../servicios/firestore_service.dart';
 import '../utilerias/formato_util.dart';
 
@@ -32,19 +33,58 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
   // Controladores y variables de estado
   late TextEditingController _tituloController;
   late TextEditingController _descController;
-  late EstadoTarea _estadoActual;
+  late String _columnaActual;
   late int _prioridadActual;
   DateTime? _fechaVencimiento;
+  String? _asignadoA;
+  List<Usuario> _miembrosEquipo = [];
+  bool _cargandoMiembros = false;
+
+  late List<String> _columnasDisponibles;
 
   @override
   void initState() {
     super.initState();
-    // Inicializamos con los datos actuales de la tarea que se abrió
     _tituloController = TextEditingController(text: widget.tarea.titulo);
     _descController = TextEditingController(text: widget.tarea.descripcion ?? '');
-    _estadoActual = widget.tarea.estado;
+
+    _columnasDisponibles = widget.tablero?.columnas.isNotEmpty == true
+        ? widget.tablero!.columnas
+        : const ['Pendiente', 'En progreso', 'Completada'];
+
+    _columnaActual = widget.tarea.estadoNombre.isNotEmpty
+        ? widget.tarea.estadoNombre
+        : widget.tarea.estado.value;
+
+    if (!_columnasDisponibles.contains(_columnaActual)) {
+      _columnaActual = _columnasDisponibles.first;
+    }
+
     _prioridadActual = widget.tarea.prioridad;
     _fechaVencimiento = widget.tarea.fechaVencimiento;
+    _asignadoA = widget.tarea.asignadoA;
+
+    if (widget.tablero != null && (widget.tablero!.esGrupal || widget.tablero!.miembrosIds.isNotEmpty)) {
+      _cargarMiembrosTablero();
+    }
+  }
+
+  Future<void> _cargarMiembrosTablero() async {
+    if (widget.tablero == null) return;
+    setState(() => _cargandoMiembros = true);
+    List<Usuario> lista = [];
+    for (String id in widget.tablero!.miembrosIds) {
+      final u = await _firestoreService.obtenerUsuarioPorId(id);
+      if (u != null) {
+        lista.add(u);
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _miembrosEquipo = lista;
+        _cargandoMiembros = false;
+      });
+    }
   }
 
   @override
@@ -59,20 +99,27 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
     const Color textoPrincipal = Color(0xFF1E293B);
     const Color azulCielo = Color(0xFF52ABEB);
     const Color verdeTurquesa = Color(0xFF63D0A1);
-    const Color azulClaro = Color(0xFF37B5F4);
-    const Color verdeAgua = Color(0xFF63B09C);
+    const Color rojoAlta = Color(0xFFE53E3E);
+    const Color naranjaMedia = Color(0xFFED8936);
+    const Color verdeBaja = Color(0xFF38A169);
 
-    // Obtener permisos del usuario actual en este tablero
     final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
     final permisos = widget.tablero?.obtenerPermisosDeUsuario(uid) ?? PermisosMiembro.todos;
-
-    // Color dinámico según la prioridad de la tarea
     final colorPrioridad = FormatoUtil.obtenerColorPorPrioridad(_prioridadActual);
+
+    // Obtener usuario asignado si existe
+    Usuario? usuarioAsignado;
+    if (_asignadoA != null) {
+      final index = _miembrosEquipo.indexWhere((u) => u.id == _asignadoA);
+      if (index != -1) usuarioAsignado = _miembrosEquipo[index];
+    }
 
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
-        left: 24, right: 24, top: 24,
+        left: 24,
+        right: 24,
+        top: 24,
       ),
       child: SingleChildScrollView(
         child: Column(
@@ -91,16 +138,22 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: colorPrioridad, width: 1.5),
                   ),
-                  child: Text(
-                    _obtenerTextoPrioridad(_prioridadActual),
-                    style: const TextStyle(
-                      color: textoPrincipal,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.flag_rounded, size: 14, color: colorPrioridad),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Prioridad ${FormatoUtil.obtenerTextoPrioridad(_prioridadActual)}',
+                        style: TextStyle(
+                          color: colorPrioridad,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                // Botones de acción superior (Editar, Eliminar, Cerrar) según permisos
                 Row(
                   children: [
                     if (permisos.editarTareas)
@@ -109,7 +162,7 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
                           _modoEdicion ? Icons.edit_off_rounded : Icons.edit_rounded,
                           color: azulCielo,
                         ),
-                        tooltip: _modoEdicion ? 'Cancelar edición' : 'Editar texto',
+                        tooltip: _modoEdicion ? 'Cancelar edición' : 'Editar tarea',
                         onPressed: () => setState(() => _modoEdicion = !_modoEdicion),
                       ),
                     if (permisos.eliminarTareas)
@@ -180,24 +233,103 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
             const Divider(),
             const SizedBox(height: 12),
 
+            // --- SECCIÓN: INTEGRANTE ASIGNADO EN TABLEROS DE EQUIPO ---
+            if (widget.tablero != null && (widget.tablero!.esGrupal || widget.tablero!.miembrosIds.isNotEmpty)) ...[
+              Text(
+                'Integrante Asignado:',
+                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: textoPrincipal),
+              ),
+              const SizedBox(height: 8),
+              if (_modoEdicion)
+                _cargandoMiembros
+                    ? const LinearProgressIndicator()
+                    : DropdownButtonFormField<String?>(
+                        value: _asignadoA,
+                        decoration: InputDecoration(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          filled: true,
+                          fillColor: Colors.grey.shade50,
+                          prefixIcon: const Icon(Icons.person_outline, color: azulCielo),
+                        ),
+                        items: [
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text('Sin asignar', style: TextStyle(color: Colors.grey)),
+                          ),
+                          ..._miembrosEquipo.map((m) {
+                            final infoRole = widget.tablero?.miembrosInfo[m.id]?.rolKanban ?? m.rol;
+                            return DropdownMenuItem<String?>(
+                              value: m.id,
+                              child: Text('${m.nombreCompleto} ($infoRole)', style: const TextStyle(fontSize: 13)),
+                            );
+                          }),
+                        ],
+                        onChanged: (val) {
+                          setState(() => _asignadoA = val);
+                        },
+                      )
+              else
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 18,
+                        backgroundColor: _asignadoA != null ? azulCielo : Colors.grey.shade300,
+                        child: Text(
+                          usuarioAsignado != null && usuarioAsignado.nombreCompleto.isNotEmpty
+                              ? usuarioAsignado.nombreCompleto[0].toUpperCase()
+                              : '?',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              usuarioAsignado != null ? usuarioAsignado.nombreCompleto : 'Sin asignar',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textoPrincipal),
+                            ),
+                            if (usuarioAsignado != null)
+                              Text(
+                                usuarioAsignado.email,
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 16),
+            ],
+
             // --- CAMBIO RÁPIDO DE COLUMNA (ESTADO) ---
             Text(
               'Mover a columna:',
               style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: textoPrincipal),
             ),
             const SizedBox(height: 8),
-            DropdownButtonFormField<EstadoTarea>(
-              initialValue: _estadoActual,
+            DropdownButtonFormField<String>(
+              value: _columnaActual,
               decoration: InputDecoration(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 filled: true,
                 fillColor: Colors.grey.shade50,
               ),
-              items: EstadoTarea.values.map((estado) {
+              items: _columnasDisponibles.map((col) {
                 return DropdownMenuItem(
-                  value: estado,
-                  child: Text(estado.value, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  value: col,
+                  child: Text(col, style: const TextStyle(fontWeight: FontWeight.w600)),
                 );
               }).toList(),
               onChanged: (_procesando || !permisos.moverTareas) ? null : _cambiarEstadoRapido,
@@ -229,13 +361,13 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
                 },
               ),
               const SizedBox(height: 16),
-              Text('Prioridad:', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: textoPrincipal)),
+              Text('Nivel de Importancia (Prioridad):', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: textoPrincipal)),
               const SizedBox(height: 8),
               Row(
                 children: [
-                  _botonPrioridad(1, 'Baja', verdeAgua),
-                  _botonPrioridad(2, 'Media', azulClaro),
-                  _botonPrioridad(3, 'Alta', verdeTurquesa),
+                  _botonPrioridad(1, 'Baja', verdeBaja),
+                  _botonPrioridad(2, 'Media', naranjaMedia),
+                  _botonPrioridad(3, 'Alta', rojoAlta),
                 ],
               ),
               const SizedBox(height: 20),
@@ -295,23 +427,41 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
 
   // --- LÓGICA DE CONTROLADORES (FIRESTORE) ---
 
-  // 1. Cambio rápido de columna desde el Dropdown
-  void _cambiarEstadoRapido(EstadoTarea? nuevoEstado) async {
-    if (nuevoEstado == null || nuevoEstado == _estadoActual) return;
+  void _cambiarEstadoRapido(String? nuevoEstado) async {
+    if (nuevoEstado == null || nuevoEstado == _columnaActual) return;
+
+    // Verificar límite de 10 tareas en la columna destino
+    if (widget.tablero != null) {
+      final tareasExistentes = await _firestoreService.obtenerTareasDeTablero(widget.tablero!.id);
+      final enColumnaDestino = tareasExistentes.where((t) {
+        return t.estadoNombre == nuevoEstado || t.estado.value == nuevoEstado;
+      }).length;
+
+      if (enColumnaDestino >= 10) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Límite alcanzado: La columna "$nuevoEstado" ya tiene el máximo de 10 tareas.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+    }
 
     setState(() {
-      _estadoActual = nuevoEstado;
+      _columnaActual = nuevoEstado;
       _procesando = true;
     });
 
     try {
-      // Usamos el método oficial del equipo en FirestoreService
-      await _firestoreService.actualizarEstadoTarea(widget.tarea.id, nuevoEstado.value);
+      await _firestoreService.actualizarEstadoTarea(widget.tarea.id, nuevoEstado);
 
       if (mounted) {
         setState(() => _procesando = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Tarea movida a: ${nuevoEstado.value}'), backgroundColor: const Color(0xFF52ABEB)),
+          SnackBar(content: Text('Tarea movida a: $nuevoEstado'), backgroundColor: const Color(0xFF52ABEB)),
         );
       }
     } catch (e) {
@@ -324,27 +474,27 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
     }
   }
 
-  // 2. Guardar todos los cambios modificados en el formulario
   void _guardarCambiosCompletos() async {
     if (_tituloController.text.trim().isEmpty) return;
 
     setState(() => _procesando = true);
 
     try {
-      // Creamos una copia actualizada de la tarea con los nuevos valores
+      final enumEstado = EstadoTareaExtension.fromString(_columnaActual);
       final tareaActualizada = widget.tarea.copyWith(
         titulo: _tituloController.text.trim(),
         descripcion: _descController.text.trim().isEmpty ? null : _descController.text.trim(),
-        estado: _estadoActual,
+        estado: enumEstado,
+        estadoNombre: _columnaActual,
         prioridad: _prioridadActual,
         fechaVencimiento: _fechaVencimiento,
+        asignadoA: _asignadoA,
       );
 
-      // Usamos el método de actualizar tarea del servicio del equipo
       await _firestoreService.actualizarTarea(tareaActualizada);
 
       if (mounted) {
-        Navigator.pop(context); // Cerramos el modal al terminar
+        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Cambios guardados con éxito'), backgroundColor: Color(0xFF63D0A1)),
         );
@@ -359,7 +509,6 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
     }
   }
 
-  // 3. Alerta de confirmación para eliminar la tarea
   void _confirmarEliminacion() {
     showDialog(
       context: context,
@@ -376,12 +525,12 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
             onPressed: () async {
               final nav = Navigator.of(context);
               final messenger = ScaffoldMessenger.of(context);
-              nav.pop(); // Cierra el diálogo
+              nav.pop();
               setState(() => _procesando = true);
               try {
                 await _firestoreService.eliminarTarea(widget.tarea.id);
                 if (mounted) {
-                  nav.pop(); // Cierra el modal de detalle
+                  nav.pop();
                   messenger.showSnackBar(
                     const SnackBar(content: Text('Tarea eliminada'), backgroundColor: Colors.redAccent),
                   );
@@ -400,14 +549,5 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
         ],
       ),
     );
-  }
-
-  String _obtenerTextoPrioridad(int prioridad) {
-    switch (prioridad) {
-      case 3: return 'Prioridad Alta';
-      case 2: return 'Prioridad Media';
-      case 1: return 'Prioridad Baja';
-      default: return 'Prioridad Media';
-    }
   }
 }
