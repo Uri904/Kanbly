@@ -134,7 +134,7 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: colorPrioridad.withValues(alpha: 0.15),
+                    color: colorPrioridad.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: colorPrioridad, width: 1.5),
                   ),
@@ -234,7 +234,7 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
             const SizedBox(height: 12),
 
             // --- SECCIÓN: INTEGRANTE ASIGNADO EN TABLEROS DE EQUIPO ---
-            if (widget.tablero != null && (widget.tablero!.esGrupal || widget.tablero!.miembrosIds.isNotEmpty)) ...[
+            if (widget.tablero != null && widget.tablero!.esGrupal) ...[
               Text(
                 'Integrante Asignado:',
                 style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: textoPrincipal),
@@ -407,7 +407,7 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
           margin: const EdgeInsets.symmetric(horizontal: 4),
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: activo ? color : color.withValues(alpha: 0.1),
+            color: activo ? color : color.withOpacity(0.1),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: color, width: activo ? 2 : 1),
           ),

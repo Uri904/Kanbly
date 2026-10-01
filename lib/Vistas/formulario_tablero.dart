@@ -30,11 +30,8 @@ class _FormularioTableroState extends State<FormularioTablero>
 
   List<Usuario> _miembrosSeleccionados = [];
   Map<String, MiembroTableroInfo> _miembrosInfo = {};
-  List<Map<String, dynamic>> _invitacionesPendientes = [];
-  String _fechaActualizacion = 'Sin actualizar';
-
-  // Columnas personalizadas del tablero
   List<String> _columnas = ['Pendiente', 'En progreso', 'Completada'];
+  String _fechaActualizacion = 'Sin actualizar';
 
   // Módulos del tablero
   bool _tieneCalendario = true;
@@ -60,7 +57,8 @@ class _FormularioTableroState extends State<FormularioTablero>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: widget.esGrupal ? 2 : 1, vsync: this);
+    // 2 Pestañas para tablero individual | 3 Pestañas para tablero en equipo
+    _tabController = TabController(length: widget.esGrupal ? 3 : 2, vsync: this);
 
     if (widget.tablero != null) {
       _nombreController.text = widget.tablero!.nombre;
@@ -119,14 +117,13 @@ class _FormularioTableroState extends State<FormularioTablero>
           widget.tablero != null
               ? 'Editar Tablero'
               : widget.esGrupal
-              ? 'Nuevo Tablero Grupal'
-              : 'Nuevo Tablero Individual',
+                  ? 'Nuevo Tablero Grupal'
+                  : 'Nuevo Tablero Individual',
           style: TextStyle(
               color: grisOscuro, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         centerTitle: true,
-        bottom: widget.esGrupal
-            ? TabBar(
+        bottom: TabBar(
           controller: _tabController,
           labelColor: colorTema,
           unselectedLabelColor: Colors.grey.shade600,
@@ -134,31 +131,34 @@ class _FormularioTableroState extends State<FormularioTablero>
           indicatorWeight: 3,
           indicatorSize: TabBarIndicatorSize.label,
           labelStyle:
-          const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-          tabs: const [
-            Tab(
-              icon: Icon(Icons.tune_rounded, size: 20),
-              text: 'General y Módulos',
+              const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+          tabs: [
+            const Tab(
+              icon: Icon(Icons.tune_rounded, size: 18),
+              text: 'Información y Módulos',
             ),
-            Tab(
-              icon: Icon(Icons.people_outline_rounded, size: 20),
-              text: 'Miembros y Permisos',
+            const Tab(
+              icon: Icon(Icons.dashboard_customize_outlined, size: 18),
+              text: 'Personalizar Tablero',
             ),
+            if (widget.esGrupal)
+              const Tab(
+                icon: Icon(Icons.people_outline_rounded, size: 18),
+                text: 'Miembros y Permisos',
+              ),
           ],
-        )
-            : null,
+        ),
       ),
       body: Form(
         key: _formKey,
-        child: widget.esGrupal
-            ? TabBarView(
+        child: TabBarView(
           controller: _tabController,
           children: [
             _construirPestanaGeneral(colorTema),
-            _construirPestanaMiembros(colorTema),
+            _construirPestanaPersonalizar(colorTema),
+            if (widget.esGrupal) _construirPestanaMiembros(colorTema),
           ],
-        )
-            : _construirPestanaGeneral(colorTema),
+        ),
       ),
       bottomNavigationBar: Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -166,7 +166,7 @@ class _FormularioTableroState extends State<FormularioTablero>
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
+              color: Colors.black.withOpacity(0.05),
               blurRadius: 10,
               offset: const Offset(0, -4),
             )
@@ -205,15 +205,15 @@ class _FormularioTableroState extends State<FormularioTablero>
         Container(
           padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
           decoration: BoxDecoration(
-            color: colorTema.withValues(alpha: 0.08),
+            color: colorTema.withOpacity(0.08),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: colorTema.withValues(alpha: 0.2)),
+            border: Border.all(color: colorTema.withOpacity(0.2)),
           ),
           child: Column(
             children: [
               CircleAvatar(
                 radius: 34,
-                backgroundColor: colorTema.withValues(alpha: 0.18),
+                backgroundColor: colorTema.withOpacity(0.18),
                 child: Icon(
                   widget.esGrupal
                       ? Icons.groups_rounded
@@ -290,10 +290,6 @@ class _FormularioTableroState extends State<FormularioTablero>
         ),
         const SizedBox(height: 20),
 
-        // SECCIÓN DE PERSONALIZACIÓN DE COLUMNAS
-        _construirSeccionColumnas(colorTema),
-        const SizedBox(height: 20),
-
         // TARJETA DE MÓDULOS ACTIVOS
         _tarjetaSeccion(
           titulo: 'Módulos Adicionales',
@@ -304,7 +300,7 @@ class _FormularioTableroState extends State<FormularioTablero>
               _construirSwitchModulo(
                 titulo: 'Calendario',
                 subtitulo:
-                'Agendar entregables y visualizar fechas en el calendario',
+                    'Agendar entregables y visualizar fechas en el calendario',
                 icono: Icons.calendar_month,
                 colorIcono: Colors.blue,
                 valor: _tieneCalendario,
@@ -315,7 +311,7 @@ class _FormularioTableroState extends State<FormularioTablero>
               _construirSwitchModulo(
                 titulo: 'Notas para tareas',
                 subtitulo:
-                'Añadir anotaciones y documentación técnica a las tareas',
+                    'Añadir anotaciones y documentación técnica a las tareas',
                 icono: Icons.note_alt_outlined,
                 colorIcono: Colors.orange,
                 valor: _tieneNotas,
@@ -326,7 +322,7 @@ class _FormularioTableroState extends State<FormularioTablero>
               _construirSwitchModulo(
                 titulo: 'Recordatorios y Alertas',
                 subtitulo:
-                'Alertas de vencimiento para los integrantes del equipo',
+                    'Alertas de vencimiento para los integrantes del equipo',
                 icono: Icons.notifications_active_outlined,
                 colorIcono: Colors.redAccent,
                 valor: _tieneRecordatorios,
@@ -346,8 +342,8 @@ class _FormularioTableroState extends State<FormularioTablero>
                 label: 'Creado el',
                 valor: widget.tablero != null
                     ? widget.tablero!.fechaCreacion
-                    .toString()
-                    .substring(0, 10)
+                        .toString()
+                        .substring(0, 10)
                     : DateTime.now().toString().substring(0, 10),
                 icono: Icons.calendar_today_rounded,
               ),
@@ -364,6 +360,365 @@ class _FormularioTableroState extends State<FormularioTablero>
         ),
         const SizedBox(height: 32),
       ],
+    );
+  }
+
+  // --- PESTAÑA 2: PERSONALIZAR TABLERO (COLUMNAS Y FLUJOS KANBAN) ---
+  Widget _construirPestanaPersonalizar(Color colorTema) {
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+      children: [
+        // CABECERA DE PERSONALIZACIÓN
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: colorTema.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: colorTema.withOpacity(0.2)),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: colorTema.withOpacity(0.2),
+                child: Icon(Icons.dashboard_customize_outlined,
+                    color: colorTema, size: 26),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Personalizar Columnas y Flujo',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: grisOscuro),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Añade, reordena o cambia el nombre de las columnas de tu tablero.',
+                      style: TextStyle(
+                          color: Colors.grey.shade600, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // PLANTILLAS RÁPIDAS
+        _tarjetaSeccion(
+          titulo: 'Plantillas de Flujo Recomendadas',
+          icono: Icons.auto_awesome_outlined,
+          colorHeader: colorTema,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Selecciona una plantilla predefinida para aplicar un flujo de trabajo rápido:',
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _columnas = ['Pendiente', 'En progreso', 'Completada'];
+                      });
+                    },
+                    icon: const Icon(Icons.restore_rounded, size: 16),
+                    label: const Text('Clásico Kanban',
+                        style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: colorTema,
+                      side:
+                          BorderSide(color: colorTema.withOpacity(0.5)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _columnas = [
+                          'Por Hacer',
+                          'En Desarrollo',
+                          'QA / Pruebas',
+                          'Aprobado'
+                        ];
+                      });
+                    },
+                    icon: const Icon(Icons.code_rounded, size: 16),
+                    label: const Text('Software & QA',
+                        style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: colorTema,
+                      side:
+                          BorderSide(color: colorTema.withOpacity(0.5)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _columnas = [
+                          'Backlog',
+                          'Por Hacer',
+                          'En Proceso',
+                          'En Revisión',
+                          'Completado'
+                        ];
+                      });
+                    },
+                    icon: const Icon(Icons.bolt_rounded, size: 16),
+                    label: const Text('Ágil / Scrum',
+                        style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: colorTema,
+                      side:
+                          BorderSide(color: colorTema.withOpacity(0.5)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // LISTA DE COLUMNAS ACTUALES
+        _tarjetaSeccion(
+          titulo: 'Columnas del Tablero (${_columnas.length})',
+          icono: Icons.view_column_rounded,
+          colorHeader: colorTema,
+          child: Column(
+            children: [
+              ..._columnas.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final colNombre = entry.value;
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 28,
+                        height: 28,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: colorTema.withOpacity(0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          '${idx + 1}',
+                          style: TextStyle(
+                            color: colorTema,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          colNombre,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                      ),
+                      if (idx > 0)
+                        IconButton(
+                          icon: const Icon(Icons.arrow_upward_rounded,
+                              size: 18, color: Colors.grey),
+                          tooltip: 'Mover hacia arriba',
+                          onPressed: () {
+                            setState(() {
+                              final item = _columnas.removeAt(idx);
+                              _columnas.insert(idx - 1, item);
+                            });
+                          },
+                        ),
+                      if (idx < _columnas.length - 1)
+                        IconButton(
+                          icon: const Icon(Icons.arrow_downward_rounded,
+                              size: 18, color: Colors.grey),
+                          tooltip: 'Mover hacia abajo',
+                          onPressed: () {
+                            setState(() {
+                              final item = _columnas.removeAt(idx);
+                              _columnas.insert(idx + 1, item);
+                            });
+                          },
+                        ),
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined,
+                            size: 18, color: Colors.blue),
+                        tooltip: 'Editar nombre',
+                        onPressed: () => _dialogEditarColumna(idx),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline_rounded,
+                            size: 18, color: Colors.redAccent),
+                        tooltip: 'Eliminar columna',
+                        onPressed: _columnas.length <= 1
+                            ? null
+                            : () {
+                                setState(() {
+                                  _columnas.removeAt(idx);
+                                });
+                              },
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 46,
+                child: ElevatedButton.icon(
+                  onPressed: _dialogAgregarColumna,
+                  icon: const Icon(Icons.add_rounded,
+                      size: 20, color: Colors.white),
+                  label: const Text('Agregar Nueva Columna',
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: colorTema,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 32),
+      ],
+    );
+  }
+
+  void _dialogAgregarColumna() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Agregar Nueva Columna',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: 'Nombre de la columna',
+            hintText: 'Ej. Por Revisar, Bloqueada, QA...',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: azulCielo,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              final nombre = controller.text.trim();
+              if (nombre.isNotEmpty) {
+                if (_columnas
+                    .map((c) => c.toLowerCase())
+                    .contains(nombre.toLowerCase())) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Ya existe una columna con este nombre')),
+                  );
+                  return;
+                }
+                setState(() {
+                  _columnas.add(nombre);
+                });
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Agregar',
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _dialogEditarColumna(int index) {
+    final controller = TextEditingController(text: _columnas[index]);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Editar Columna',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: 'Nombre de la columna',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: azulCielo,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              final nombre = controller.text.trim();
+              if (nombre.isNotEmpty) {
+                setState(() {
+                  _columnas[index] = nombre;
+                });
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Guardar',
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -385,7 +740,7 @@ class _FormularioTableroState extends State<FormularioTablero>
       secondary: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: colorIcono.withValues(alpha: 0.12),
+          color: colorIcono.withOpacity(0.12),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(icono, color: colorIcono, size: 22),
@@ -396,203 +751,7 @@ class _FormularioTableroState extends State<FormularioTablero>
     );
   }
 
-  Widget _construirSeccionColumnas(Color colorTema) {
-    return _tarjetaSeccion(
-      titulo: 'Personalización del Tablero (Columnas)',
-      icono: Icons.view_column_rounded,
-      colorHeader: colorTema,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Personaliza las columnas de tu tablero según tus necesidades (por defecto: Pendiente, En progreso, Completada):',
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-          ),
-          const SizedBox(height: 14),
-          ..._columnas.asMap().entries.map((entry) {
-            final idx = entry.key;
-            final colNombre = entry.value;
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 26,
-                    height: 26,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: colorTema.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Text(
-                      '${idx + 1}',
-                      style: TextStyle(
-                        color: colorTema,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      colNombre,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                        color: Color(0xFF1E293B),
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.blue),
-                    tooltip: 'Editar nombre',
-                    onPressed: () => _dialogEditarColumna(idx),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline_rounded, size: 20, color: Colors.redAccent),
-                    tooltip: 'Eliminar columna',
-                    onPressed: _columnas.length <= 1
-                        ? null
-                        : () {
-                            setState(() {
-                              _columnas.removeAt(idx);
-                            });
-                          },
-                  ),
-                ],
-              ),
-            );
-          }),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _dialogAgregarColumna,
-                  icon: const Icon(Icons.add_rounded, size: 20),
-                  label: const Text('Agregar Columna', style: TextStyle(fontWeight: FontWeight.bold)),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: colorTema,
-                    side: BorderSide(color: colorTema),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    _columnas = ['Pendiente', 'En progreso', 'Completada'];
-                  });
-                },
-                child: const Text('Por defecto', style: TextStyle(fontSize: 12)),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _dialogAgregarColumna() {
-    final controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Agregar Nueva Columna', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: InputDecoration(
-            labelText: 'Nombre de la columna',
-            hintText: 'Ej. Por Revisar, Bloqueada, QA...',
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: azulCielo,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () {
-              final nombre = controller.text.trim();
-              if (nombre.isNotEmpty) {
-                if (_columnas.map((c) => c.toLowerCase()).contains(nombre.toLowerCase())) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Ya existe una columna con este nombre')),
-                  );
-                  return;
-                }
-                setState(() {
-                  _columnas.add(nombre);
-                });
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Agregar', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _dialogEditarColumna(int index) {
-    final controller = TextEditingController(text: _columnas[index]);
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Editar Columna', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: InputDecoration(
-            labelText: 'Nombre de la columna',
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: azulCielo,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () {
-              final nombre = controller.text.trim();
-              if (nombre.isNotEmpty) {
-                setState(() {
-                  _columnas[index] = nombre;
-                });
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Guardar', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- PESTAÑA 2: MIEMBROS Y PERMISOS DE EQUIPO ---
+  // --- PESTAÑA 3: MIEMBROS Y PERMISOS DE EQUIPO ---
   Widget _construirPestanaMiembros(Color colorTema) {
     final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
     final bool soyCreadorOriginal =
@@ -612,7 +771,7 @@ class _FormularioTableroState extends State<FormularioTablero>
             border: Border.all(color: Colors.grey.shade200),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.02),
+                color: Colors.black.withOpacity(0.02),
                 blurRadius: 6,
                 offset: const Offset(0, 3),
               ),
@@ -635,7 +794,7 @@ class _FormularioTableroState extends State<FormularioTablero>
                   Text(
                     '${_miembrosSeleccionados.length} miembros registrados',
                     style:
-                    TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                        TextStyle(color: Colors.grey.shade600, fontSize: 12),
                   ),
                 ],
               ),
@@ -692,10 +851,6 @@ class _FormularioTableroState extends State<FormularioTablero>
                   esAdmin: isOwner,
                 );
 
-            // Regla de eliminación de miembros:
-            // - El Dueño Principal NUNCA puede ser removido.
-            // - Un Administrador solo puede ser removido por el Creador Original.
-            // - Un miembro regular puede ser removido por el Creador o por un Admin.
             bool puedeRemover = false;
             if (!isOwner) {
               if (info.esAdmin) {
@@ -715,13 +870,13 @@ class _FormularioTableroState extends State<FormularioTablero>
                   color: isOwner
                       ? Colors.amber.shade400
                       : info.esAdmin
-                      ? azulCielo
-                      : Colors.grey.shade200,
+                          ? azulCielo
+                          : Colors.grey.shade200,
                   width: isOwner || info.esAdmin ? 1.5 : 1.0,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.02),
+                    color: Colors.black.withOpacity(0.02),
                     blurRadius: 4,
                     offset: const Offset(0, 2),
                   ),
@@ -737,8 +892,8 @@ class _FormularioTableroState extends State<FormularioTablero>
                         backgroundColor: isOwner
                             ? Colors.amber.shade100
                             : info.esAdmin
-                            ? azulCielo.withValues(alpha: 0.15)
-                            : verdeTurquesa.withValues(alpha: 0.15),
+                                ? azulCielo.withOpacity(0.15)
+                                : verdeTurquesa.withOpacity(0.15),
                         child: Text(
                           usuario.nombreCompleto.isNotEmpty
                               ? usuario.nombreCompleto[0].toUpperCase()
@@ -747,8 +902,8 @@ class _FormularioTableroState extends State<FormularioTablero>
                             color: isOwner
                                 ? Colors.amber.shade900
                                 : info.esAdmin
-                                ? azulCielo
-                                : verdeTurquesa,
+                                    ? azulCielo
+                                    : verdeTurquesa,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -811,27 +966,27 @@ class _FormularioTableroState extends State<FormularioTablero>
                             texto: isOwner
                                 ? 'Dueño Principal'
                                 : info.esAdmin
-                                ? 'Admin / Co-dueño'
-                                : 'Miembro',
+                                    ? 'Admin / Co-dueño'
+                                    : 'Miembro',
                             colorFondo: isOwner
                                 ? Colors.amber.shade100
                                 : info.esAdmin
-                                ? azulCielo.withValues(alpha: 0.15)
-                                : Colors.grey.shade100,
+                                    ? azulCielo.withOpacity(0.15)
+                                    : Colors.grey.shade100,
                             colorTexto: isOwner
                                 ? Colors.amber.shade900
                                 : info.esAdmin
-                                ? azulCielo
-                                : Colors.grey.shade800,
+                                    ? azulCielo
+                                    : Colors.grey.shade800,
                             icono: isOwner
                                 ? Icons.shield_rounded
                                 : info.esAdmin
-                                ? Icons.admin_panel_settings
-                                : Icons.person,
+                                    ? Icons.admin_panel_settings
+                                    : Icons.person,
                           ),
                           _badge(
                             texto: info.rolKanban,
-                            colorFondo: verdeTurquesa.withValues(alpha: 0.15),
+                            colorFondo: verdeTurquesa.withOpacity(0.15),
                             colorTexto: const Color(0xFF1E293B),
                             icono: Icons.work_outline_rounded,
                           ),
@@ -858,19 +1013,15 @@ class _FormularioTableroState extends State<FormularioTablero>
 
   // --- MODAL DE PERMISOS GRANULARES Y ROLES KANBAN ---
   void _abrirModalPermisosMiembro(
-      Usuario usuario,
-      MiembroTableroInfo infoActual,
-      bool isOwner,
-      String currentUserId,
-      ) {
+    Usuario usuario,
+    MiembroTableroInfo infoActual,
+    bool isOwner,
+    String currentUserId,
+  ) {
     final bool soyCreadorOriginal =
         widget.tablero?.esCreador(currentUserId) ?? true;
     final bool esObjetivoAdmin = infoActual.esAdmin;
 
-    // REGLAS DE JERARQUÍA EXIGIDAS POR EL USUARIO:
-    // 1. El Dueño Principal siempre tiene todos los permisos e inmutable.
-    // 2. Si el integrante objetivo es Admin, SOLO el Dueño Principal (Creador) puede editar sus permisos/rol.
-    // 3. Un integrante regular puede ser editado por el Creador o por un Admin.
     final bool puedeEditar = !isOwner &&
         (soyCreadorOriginal ||
             (!esObjetivoAdmin &&
@@ -902,7 +1053,6 @@ class _FormularioTableroState extends State<FormularioTablero>
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // INDICADOR SUPERIOR
                     Center(
                       child: Container(
                         width: 44,
@@ -923,8 +1073,8 @@ class _FormularioTableroState extends State<FormularioTablero>
                           backgroundColor: isOwner
                               ? Colors.amber.shade100
                               : esAdminSeleccionado
-                              ? azulCielo.withValues(alpha: 0.15)
-                              : verdeTurquesa.withValues(alpha: 0.15),
+                                  ? azulCielo.withOpacity(0.15)
+                                  : verdeTurquesa.withOpacity(0.15),
                           child: Text(
                             usuario.nombreCompleto.isNotEmpty
                                 ? usuario.nombreCompleto[0].toUpperCase()
@@ -933,8 +1083,8 @@ class _FormularioTableroState extends State<FormularioTablero>
                               color: isOwner
                                   ? Colors.amber.shade900
                                   : esAdminSeleccionado
-                                  ? azulCielo
-                                  : verdeTurquesa,
+                                      ? azulCielo
+                                      : verdeTurquesa,
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
                             ),
@@ -963,7 +1113,6 @@ class _FormularioTableroState extends State<FormularioTablero>
                     ),
                     const SizedBox(height: 16),
 
-                    // BANNER INFORMATIVO DE JERARQUÍA SEGÚN CASO
                     if (isOwner)
                       Container(
                         padding: const EdgeInsets.all(12),
@@ -1017,7 +1166,6 @@ class _FormularioTableroState extends State<FormularioTablero>
                         ),
                       ),
 
-                    // OPCIÓN DE ADMINISTRADOR / CO-DUEÑO
                     if (!isOwner)
                       Container(
                         margin: const EdgeInsets.only(bottom: 16),
@@ -1037,20 +1185,19 @@ class _FormularioTableroState extends State<FormularioTablero>
                           subtitle: const Text(
                               'Otorga acceso y administración completa al tablero',
                               style:
-                              TextStyle(fontSize: 11, color: Colors.grey)),
+                                  TextStyle(fontSize: 11, color: Colors.grey)),
                           value: esAdminSeleccionado,
                           activeTrackColor: azulCielo,
                           onChanged: puedeEditar && soyCreadorOriginal
                               ? (val) {
-                            setModalState(() {
-                              esAdminSeleccionado = val;
-                            });
-                          }
+                                  setModalState(() {
+                                    esAdminSeleccionado = val;
+                                  });
+                                }
                               : null,
                         ),
                       ),
 
-                    // CAMBIO DE ROL KANBAN EN EL EQUIPO
                     const Text('Rol Kanban en el Equipo:',
                         style: TextStyle(
                             fontWeight: FontWeight.bold,
@@ -1059,7 +1206,7 @@ class _FormularioTableroState extends State<FormularioTablero>
                     const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
                       initialValue: _rolesKanbanDisponibles
-                          .contains(rolKanbanSeleccionado)
+                              .contains(rolKanbanSeleccionado)
                           ? rolKanbanSeleccionado
                           : 'Programador / Desarrollador',
                       decoration: InputDecoration(
@@ -1075,22 +1222,20 @@ class _FormularioTableroState extends State<FormularioTablero>
                       items: _rolesKanbanDisponibles.map((rol) {
                         return DropdownMenuItem<String>(
                           value: rol,
-                          child: Text(rol,
-                              style: const TextStyle(fontSize: 13)),
+                          child: Text(rol, style: const TextStyle(fontSize: 13)),
                         );
                       }).toList(),
                       onChanged: puedeEditar
                           ? (value) {
-                        if (value != null) {
-                          setModalState(
-                                  () => rolKanbanSeleccionado = value);
-                        }
-                      }
+                              if (value != null) {
+                                setModalState(
+                                    () => rolKanbanSeleccionado = value);
+                              }
+                            }
                           : null,
                     ),
                     const SizedBox(height: 20),
 
-                    // SECCIÓN DE PERMISOS GRANULARES
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -1125,43 +1270,44 @@ class _FormularioTableroState extends State<FormularioTablero>
                               'Gestión de Tareas', Icons.task_alt_rounded),
                           _switchPermiso(
                             titulo: 'Crear Tareas',
-                            subtitulo: 'Permite agregar nuevas tareas al tablero',
+                            subtitulo:
+                                'Permite agregar nuevas tareas al tablero',
                             valor: esAdminSeleccionado || isOwner
                                 ? true
                                 : permisosTemp.crearTareas,
                             deshabilitado:
-                            !puedeEditar || esAdminSeleccionado || isOwner,
+                                !puedeEditar || esAdminSeleccionado || isOwner,
                             onChanged: (v) => setModalState(() =>
-                            permisosTemp =
-                                permisosTemp.copyWith(crearTareas: v)),
+                                permisosTemp =
+                                    permisosTemp.copyWith(crearTareas: v)),
                           ),
                           const Divider(height: 1),
                           _switchPermiso(
                             titulo: 'Mover y Reordenar Tareas',
                             subtitulo:
-                            'Permite arrastrar tareas entre las columnas',
+                                'Permite arrastrar tareas entre las columnas',
                             valor: esAdminSeleccionado || isOwner
                                 ? true
                                 : permisosTemp.moverTareas,
                             deshabilitado:
-                            !puedeEditar || esAdminSeleccionado || isOwner,
+                                !puedeEditar || esAdminSeleccionado || isOwner,
                             onChanged: (v) => setModalState(() =>
-                            permisosTemp =
-                                permisosTemp.copyWith(moverTareas: v)),
+                                permisosTemp =
+                                    permisosTemp.copyWith(moverTareas: v)),
                           ),
                           const Divider(height: 1),
                           _switchPermiso(
                             titulo: 'Editar Tareas',
                             subtitulo:
-                            'Modificar título, descripción, prioridad y fecha',
+                                'Modificar título, descripción, prioridad y fecha',
                             valor: esAdminSeleccionado || isOwner
                                 ? true
                                 : permisosTemp.editarTareas,
                             deshabilitado:
-                            !puedeEditar || esAdminSeleccionado || isOwner,
+                                !puedeEditar || esAdminSeleccionado || isOwner,
                             onChanged: (v) => setModalState(() =>
-                            permisosTemp =
-                                permisosTemp.copyWith(editarTareas: v)),
+                                permisosTemp =
+                                    permisosTemp.copyWith(editarTareas: v)),
                           ),
                           const Divider(height: 1),
                           _switchPermiso(
@@ -1171,51 +1317,51 @@ class _FormularioTableroState extends State<FormularioTablero>
                                 ? true
                                 : permisosTemp.eliminarTareas,
                             deshabilitado:
-                            !puedeEditar || esAdminSeleccionado || isOwner,
+                                !puedeEditar || esAdminSeleccionado || isOwner,
                             onChanged: (v) => setModalState(() =>
-                            permisosTemp =
-                                permisosTemp.copyWith(eliminarTareas: v)),
+                                permisosTemp =
+                                    permisosTemp.copyWith(eliminarTareas: v)),
                           ),
                           _encabezadoGrupoPermisos('Módulos y Configuración',
                               Icons.grid_view_rounded),
                           _switchPermiso(
                             titulo: 'Gestionar Módulos',
                             subtitulo:
-                            'Acceso al Calendario, Notas y Recordatorios',
+                                'Acceso al Calendario, Notas y Recordatorios',
                             valor: esAdminSeleccionado || isOwner
                                 ? true
                                 : permisosTemp.gestionarModulos,
                             deshabilitado:
-                            !puedeEditar || esAdminSeleccionado || isOwner,
+                                !puedeEditar || esAdminSeleccionado || isOwner,
                             onChanged: (v) => setModalState(() =>
-                            permisosTemp =
-                                permisosTemp.copyWith(gestionarModulos: v)),
+                                permisosTemp =
+                                    permisosTemp.copyWith(gestionarModulos: v)),
                           ),
                           const Divider(height: 1),
                           _switchPermiso(
                             titulo: 'Editar Configuración del Tablero',
                             subtitulo:
-                            'Cambiar nombre, descripción y opciones generales',
+                                'Cambiar nombre, descripción y opciones generales',
                             valor: esAdminSeleccionado || isOwner
                                 ? true
                                 : permisosTemp.editarTablero,
                             deshabilitado:
-                            !puedeEditar || esAdminSeleccionado || isOwner,
+                                !puedeEditar || esAdminSeleccionado || isOwner,
                             onChanged: (v) => setModalState(() =>
-                            permisosTemp =
-                                permisosTemp.copyWith(editarTablero: v)),
+                                permisosTemp =
+                                    permisosTemp.copyWith(editarTablero: v)),
                           ),
                           _encabezadoGrupoPermisos(
                               'Gestión del Equipo', Icons.badge_outlined),
                           _switchPermiso(
                             titulo: 'Administrar Miembros',
                             subtitulo:
-                            'Invitar integrantes y ajustar permisos regulares',
+                                'Invitar integrantes y ajustar permisos regulares',
                             valor: esAdminSeleccionado || isOwner
                                 ? true
                                 : permisosTemp.administrarMiembros,
                             deshabilitado:
-                            !puedeEditar || esAdminSeleccionado || isOwner,
+                                !puedeEditar || esAdminSeleccionado || isOwner,
                             onChanged: (v) => setModalState(() => permisosTemp =
                                 permisosTemp.copyWith(administrarMiembros: v)),
                           ),
@@ -1224,7 +1370,6 @@ class _FormularioTableroState extends State<FormularioTablero>
                     ),
                     const SizedBox(height: 24),
 
-                    // BOTÓN APLICAR PERMISOS
                     SizedBox(
                       width: double.infinity,
                       height: 50,
@@ -1237,19 +1382,19 @@ class _FormularioTableroState extends State<FormularioTablero>
                         ),
                         onPressed: puedeEditar
                             ? () {
-                          setState(() {
-                            _miembrosInfo[usuario.id] =
-                                MiembroTableroInfo(
-                                  usuarioId: usuario.id,
-                                  rolKanban: rolKanbanSeleccionado,
-                                  esAdmin: esAdminSeleccionado,
-                                  permisos: esAdminSeleccionado
-                                      ? PermisosMiembro.todos
-                                      : permisosTemp,
-                                );
-                          });
-                          Navigator.pop(context);
-                        }
+                                setState(() {
+                                  _miembrosInfo[usuario.id] =
+                                      MiembroTableroInfo(
+                                    usuarioId: usuario.id,
+                                    rolKanban: rolKanbanSeleccionado,
+                                    esAdmin: esAdminSeleccionado,
+                                    permisos: esAdminSeleccionado
+                                        ? PermisosMiembro.todos
+                                        : permisosTemp,
+                                  );
+                                });
+                                Navigator.pop(context);
+                              }
                             : () => Navigator.pop(context),
                         child: Text(
                           puedeEditar ? 'Aplicar Cambios' : 'Cerrar',
@@ -1326,7 +1471,7 @@ class _FormularioTableroState extends State<FormularioTablero>
         border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
+            color: Colors.black.withOpacity(0.02),
             blurRadius: 6,
             offset: const Offset(0, 3),
           ),
@@ -1357,8 +1502,8 @@ class _FormularioTableroState extends State<FormularioTablero>
 
   Widget _chipInfo(
       {required String label,
-        required String valor,
-        required IconData icono}) {
+      required String valor,
+      required IconData icono}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -1389,9 +1534,9 @@ class _FormularioTableroState extends State<FormularioTablero>
 
   Widget _badge(
       {required String texto,
-        required Color colorFondo,
-        required Color colorTexto,
-        required IconData icono}) {
+      required Color colorFondo,
+      required Color colorTexto,
+      required IconData icono}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -1415,8 +1560,8 @@ class _FormularioTableroState extends State<FormularioTablero>
 
   InputDecoration _construirDecoracionInput(
       {required String pista,
-        required IconData icono,
-        required Color colorFoco}) {
+      required IconData icono,
+      required Color colorFoco}) {
     return InputDecoration(
       hintText: pista,
       hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
@@ -1443,7 +1588,7 @@ class _FormularioTableroState extends State<FormularioTablero>
         final creadorIdFinal = widget.tablero?.creadorId ?? uid;
 
         List<String> miembrosFinales =
-        _miembrosSeleccionados.map((u) => u.id).toList();
+            _miembrosSeleccionados.map((u) => u.id).toList();
         if (!miembrosFinales.contains(creadorIdFinal)) {
           miembrosFinales.add(creadorIdFinal);
         }
@@ -1465,11 +1610,13 @@ class _FormularioTableroState extends State<FormularioTablero>
           creadorId: creadorIdFinal,
           miembrosIds: miembrosFinales,
           miembrosInfo: _miembrosInfo,
+          columnas: _columnas.isNotEmpty
+              ? _columnas
+              : const ['Pendiente', 'En progreso', 'Completada'],
           fechaCreacion: widget.tablero?.fechaCreacion ?? DateTime.now(),
           tieneCalendario: _tieneCalendario,
           tieneNotas: _tieneNotas,
           tieneRecordatorios: _tieneRecordatorios,
-          columnas: _columnas.isNotEmpty ? _columnas : const ['Pendiente', 'En progreso', 'Completada'],
           fechaActualizacion: widget.tablero != null ? DateTime.now() : null,
         );
 
@@ -1478,16 +1625,7 @@ class _FormularioTableroState extends State<FormularioTablero>
         } else {
           await _firestoreService.actualizarTablero(tablero);
         }
-        for (final invitacion in _invitacionesPendientes) {
-          await _firestoreService.crearInvitacion(
-            tableroId: tablero.id,
-            tableroNombre: tablero.nombre,
-            invitadoId: invitacion['usuarioId'],
-            invitadoEmail: invitacion['email'],
-            invitadoPor: uid,
-            rol: invitacion['rol'],
-          );
-        }
+
         if (!mounted) return;
         Navigator.of(context).pop(true);
       } catch (e) {
@@ -1589,7 +1727,7 @@ class _FormularioTableroState extends State<FormularioTablero>
                     if (dialogFormKey.currentState!.validate()) {
                       final email = emailController.text.trim();
                       final usuario =
-                      await _firestoreService.obtenerUsuarioPorEmail(email);
+                          await _firestoreService.obtenerUsuarioPorEmail(email);
 
                       if (usuario == null) {
                         if (!context.mounted) return;
@@ -1601,19 +1739,18 @@ class _FormularioTableroState extends State<FormularioTablero>
                         return;
                       }
 
-                      final yaInvitado = _invitacionesPendientes.any(
-                            (invitacion) => invitacion['usuarioId'] == usuario.id,
-                      );
-
-                      if (!yaInvitado) {
-                        setState(() {
-                          _invitacionesPendientes.add({
-                            'usuarioId': usuario.id,
-                            'email': usuario.email,
-                            'rol': rolSeleccionado,
-                          });
-                        });
-                      }
+                      setState(() {
+                        if (!_miembrosSeleccionados
+                            .any((u) => u.id == usuario.id)) {
+                          _miembrosSeleccionados.add(usuario);
+                        }
+                        _miembrosInfo[usuario.id] = MiembroTableroInfo(
+                          usuarioId: usuario.id,
+                          rolKanban: rolSeleccionado,
+                          esAdmin: false,
+                          permisos: const PermisosMiembro(),
+                        );
+                      });
 
                       if (!context.mounted) return;
                       Navigator.pop(context);

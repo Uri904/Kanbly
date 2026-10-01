@@ -180,7 +180,7 @@ class _FormularioTareaState extends State<FormularioTarea> {
               const SizedBox(height: 14),
 
               // --- ASIGNACIÓN DE INTEGRANTE EN TABLEROS DE EQUIPO ---
-              if (widget.tablero.esGrupal || widget.tablero.miembrosIds.isNotEmpty) ...[
+              if (widget.tablero.esGrupal) ...[
                 if (_cargandoMiembros)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 8.0),
@@ -307,7 +307,7 @@ class _FormularioTareaState extends State<FormularioTarea> {
           margin: const EdgeInsets.symmetric(horizontal: 4),
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: activo ? color : color.withValues(alpha: 0.1),
+            color: activo ? color : color.withOpacity(0.1),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: color, width: activo ? 2 : 1),
           ),

@@ -4,7 +4,7 @@ enum EstadoTarea {
   pendiente,
   enProgreso,
   completada,
-  bloqueada, // Nuevo estado según metodología Kanban
+  bloqueada,
 }
 
 extension EstadoTareaExtension on EstadoTarea {
@@ -22,12 +22,19 @@ extension EstadoTareaExtension on EstadoTarea {
   }
 
   static EstadoTarea fromString(String value) {
-    switch (value) {
+    switch (value.trim()) {
       case 'Pendiente':
+      case 'Por Hacer':
+      case 'Por hacer':
         return EstadoTarea.pendiente;
       case 'En progreso':
+      case 'En proceso':
+      case 'Haciendo':
         return EstadoTarea.enProgreso;
       case 'Completada':
+      case 'Completado':
+      case 'Terminada':
+      case 'Hecho':
         return EstadoTarea.completada;
       case 'Bloqueada':
         return EstadoTarea.bloqueada;
@@ -52,8 +59,8 @@ class Tarea {
   final List<String> etiquetas;
   final int prioridad; // 1 = baja, 2 = media, 3 = alta
   final bool archivada;
-  final String? creadaPor; // ID del usuario que creó la tarea
-  final String? comentario; // Comentario adicional
+  final String? creadaPor;
+  final String? comentario;
 
   Tarea({
     required this.id,
@@ -74,25 +81,59 @@ class Tarea {
     this.comentario,
   }) : estadoNombre = estadoNombre ?? (estado.value);
 
+  static int _parsePrioridad(dynamic val) {
+    if (val == null) return 2;
+    if (val is int) return val;
+    if (val is num) return val.toInt();
+    if (val is String) {
+      final parsed = int.tryParse(val);
+      if (parsed != null) return parsed;
+      final str = val.trim().toLowerCase();
+      if (str == 'alta') return 3;
+      if (str == 'media') return 2;
+      if (str == 'baja') return 1;
+    }
+    return 2;
+  }
+
+  static int _parseInt(dynamic val) {
+    if (val == null) return 0;
+    if (val is int) return val;
+    if (val is num) return val.toInt();
+    if (val is String) return int.tryParse(val) ?? 0;
+    return 0;
+  }
+
+  static DateTime? _parseFecha(dynamic val) {
+    if (val == null) return null;
+    if (val is Timestamp) return val.toDate();
+    if (val is DateTime) return val;
+    if (val is int) return DateTime.fromMillisecondsSinceEpoch(val);
+    if (val is String) return DateTime.tryParse(val);
+    return null;
+  }
+
   factory Tarea.fromMap(String id, Map<String, dynamic> map) {
     final estadoStr = map['estado']?.toString() ?? 'Pendiente';
+    final tituloStr = map['titulo']?.toString() ?? 'Tarea sin título';
+
     return Tarea(
       id: id,
-      titulo: map['titulo'] ?? 'Tarea sin título',
-      descripcion: map['descripcion'],
+      titulo: tituloStr.trim().isNotEmpty ? tituloStr : 'Tarea sin título',
+      descripcion: map['descripcion']?.toString(),
       estado: EstadoTareaExtension.fromString(estadoStr),
       estadoNombre: estadoStr,
-      orden: map['orden'] ?? 0,
-      tableroId: map['tableroId'] ?? '',
-      asignadoA: map['asignadoA'],
-      fechaCreacion: (map['fechaCreacion'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      fechaVencimiento: (map['fechaVencimiento'] as Timestamp?)?.toDate(),
-      fechaActualizacion: (map['fechaActualizacion'] as Timestamp?)?.toDate(),
+      orden: _parseInt(map['orden']),
+      tableroId: map['tableroId']?.toString() ?? '',
+      asignadoA: map['asignadoA']?.toString(),
+      fechaCreacion: _parseFecha(map['fechaCreacion']) ?? DateTime.now(),
+      fechaVencimiento: _parseFecha(map['fechaVencimiento']),
+      fechaActualizacion: _parseFecha(map['fechaActualizacion']),
       etiquetas: List<String>.from(map['etiquetas'] ?? []),
-      prioridad: map['prioridad'] ?? 2,
+      prioridad: _parsePrioridad(map['prioridad']),
       archivada: map['archivada'] ?? false,
-      creadaPor: map['creadaPor'],
-      comentario: map['comentario'],
+      creadaPor: map['creadaPor']?.toString(),
+      comentario: map['comentario']?.toString(),
     );
   }
 

@@ -41,4 +41,12 @@ class FormatoUtil {
     }
     return usuario.nombreCompleto.substring(0, 1).toUpperCase();
   }
+
+  // 3. Formateo de fecha en formato corto dd/mm/yyyy
+  static String formatearFechaCorta(DateTime? fecha) {
+    if (fecha == null) return 'Sin fecha';
+    final dia = fecha.day.toString().padLeft(2, '0');
+    final mes = fecha.month.toString().padLeft(2, '0');
+    return '$dia/$mes/${fecha.year}';
+  }
 }
