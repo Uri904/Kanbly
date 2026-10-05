@@ -954,9 +954,12 @@ class _FormularioTableroState extends State<FormularioTablero>
                   const Divider(height: 1),
                   const SizedBox(height: 8),
 
-                  // BADGES Y BOTÓN DE PERMISOS
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  // BADGES Y BOTÓN DE PERMISOS (RESPONSIVO SIN OVERFLOW)
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
                       Wrap(
                         spacing: 6,
@@ -1209,6 +1212,7 @@ class _FormularioTableroState extends State<FormularioTablero>
                               .contains(rolKanbanSeleccionado)
                           ? rolKanbanSeleccionado
                           : 'Programador / Desarrollador',
+                      isExpanded: true,
                       decoration: InputDecoration(
                         filled: true,
                         fillColor: Colors.grey.shade50,
@@ -1222,7 +1226,7 @@ class _FormularioTableroState extends State<FormularioTablero>
                       items: _rolesKanbanDisponibles.map((rol) {
                         return DropdownMenuItem<String>(
                           value: rol,
-                          child: Text(rol, style: const TextStyle(fontSize: 13)),
+                          child: Text(rol, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
                         );
                       }).toList(),
                       onChanged: puedeEditar
@@ -1689,6 +1693,7 @@ class _FormularioTableroState extends State<FormularioTablero>
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
                         initialValue: rolSeleccionado,
+                        isExpanded: true,
                         decoration: InputDecoration(
                           border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12)),
@@ -1699,7 +1704,8 @@ class _FormularioTableroState extends State<FormularioTablero>
                           return DropdownMenuItem<String>(
                             value: rol,
                             child: Text(rol,
-                                style: const TextStyle(fontSize: 13)),
+                                style: const TextStyle(fontSize: 13),
+                                overflow: TextOverflow.ellipsis),
                           );
                         }).toList(),
                         onChanged: (value) {

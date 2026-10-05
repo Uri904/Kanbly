@@ -328,42 +328,35 @@ class _MisTablerosState extends State<MisTableros> {
                           ),
                         ),
 
-                        PopupMenuButton<String>(
-                          icon: const Icon(
-                            Icons.more_vert,
-                            color: Colors.grey,
-                            size: 20,
-                          ),
-
-                          onSelected: (valor) {
-
-                            if (valor == 'editar') {
-                              _editarTablero(tablero);
-                            }
-
-                            if (valor == 'eliminar') {
-                              _confirmarEliminar(tablero);
-                            }
-
-                          },
-
-                          itemBuilder: (context) => [
-
-                            const PopupMenuItem(
-                              value: 'editar',
-                              child: Text('Editar'),
+                        if (tablero.esAdminOCreador(FirebaseAuth.instance.currentUser?.uid ?? ''))
+                          PopupMenuButton<String>(
+                            icon: const Icon(
+                              Icons.more_vert,
+                              color: Colors.grey,
+                              size: 20,
                             ),
-
-                            const PopupMenuItem(
-                              value: 'eliminar',
-                              child: Text(
-                                'Eliminar',
-                                style: TextStyle(color: Colors.red),
+                            onSelected: (valor) {
+                              if (valor == 'editar') {
+                                _editarTablero(tablero);
+                              }
+                              if (valor == 'eliminar') {
+                                _confirmarEliminar(tablero);
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              const PopupMenuItem(
+                                value: 'editar',
+                                child: Text('Editar'),
                               ),
-                            ),
-
-                          ],
-                        ),
+                              const PopupMenuItem(
+                                value: 'eliminar',
+                                child: Text(
+                                  'Eliminar',
+                                  style: TextStyle(color: Colors.red),
+                                ),
+                              ),
+                            ],
+                          ),
 
                       ],
                     ),
@@ -585,12 +578,11 @@ class _MisTablerosState extends State<MisTableros> {
 
   void _editarTablero(Tablero tablero) async {
     final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-    final permisos = tablero.obtenerPermisosDeUsuario(uid);
 
-    if (!permisos.editarTablero && !permisos.administrarMiembros) {
+    if (!tablero.esAdminOCreador(uid)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No tienes permiso para editar la configuración de este tablero'),
+          content: Text('Solo el dueño o los administradores pueden acceder a los ajustes del tablero'),
           backgroundColor: Colors.redAccent,
         ),
       );

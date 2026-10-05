@@ -113,15 +113,15 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                           ),
                         ),
                       ),
-                      // --- BOTÓN DE EDICIÓN Y PERSONALIZACIÓN DEL TABLERO ---
-                      if (tableroActivo != null && (permisos.editarTablero || permisos.administrarMiembros))
+                      // --- BOTÓN DE EDICIÓN Y PERSONALIZACIÓN DEL TABLERO (SOLO DUEÑO O ADMIN) ---
+                      if (tableroActivo != null && tableroActivo.esAdminOCreador(currentUid))
                         IconButton(
                           icon: const Icon(Icons.settings_outlined, color: Colors.grey, size: 24),
-                          tooltip: 'Configuración y Personalización del tablero',
+                          tooltip: 'Ajustes y Configuración del tablero',
                           onPressed: () => _abrirEdicionTablero(context, tableroActivo),
                         ),
-                      // --- BOTÓN DE MENÚ DE MÓDULOS (Calendario, Notas, Recordatorios) ---
-                      if (tableroActivo != null)
+                      // --- BOTÓN DE MENÚ DE MÓDULOS (SEGÚN PERMISOS) ---
+                      if (tableroActivo != null && permisos.gestionarModulos)
                         PopupMenuButton<String>(
                           icon: Icon(Icons.apps_rounded, color: colorAcento, size: 26),
                           tooltip: 'Módulos del tablero',
@@ -424,9 +424,14 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
       },
       builder: (context, candidateData, rejectedData) {
         final isHovered = candidateData.isNotEmpty;
+        final double maxHeight = MediaQuery.of(context).size.height - 220;
+
         return Container(
           width: 280,
-          constraints: const BoxConstraints(minHeight: 450),
+          constraints: BoxConstraints(
+            minHeight: 200,
+            maxHeight: maxHeight > 300 ? maxHeight : 500,
+          ),
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: isHovered
@@ -441,7 +446,7 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Encabezado con el conteo real dinámico
+              // Encabezado con el conteo real dinámico (Fijo en la parte superior)
               ColumnHeaderWidget(
                 count: '${tareas.length}',
                 title: titulo,
@@ -449,78 +454,85 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
               ),
               const SizedBox(height: 12),
 
-              // Lista de tarjetas o mensaje de columna vacía
-              if (tareas.isEmpty)
-                Container(
-                  height: 100,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: isHovered ? colorHeader : Colors.grey.shade300,
-                      style: BorderStyle.none,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    isHovered ? 'Soltar aquí' : 'Sin tareas en esta columna',
-                    style: TextStyle(
-                      color: isHovered ? colorHeader : Colors.grey.shade400,
-                      fontWeight: isHovered ? FontWeight.bold : FontWeight.normal,
-                      fontSize: 12,
-                    ),
-                  ),
-                )
-              else
-                ...tareas.map((tarea) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: LongPressDraggable<Tarea>(
-                    data: tarea,
-                    maxSimultaneousDrags: permisos.moverTareas ? 1 : 0,
-                    delay: const Duration(milliseconds: 150),
-                    hapticFeedbackOnStart: true,
-                    axis: null,
-                    feedback: Material(
-                      type: MaterialType.transparency,
-                      child: Transform.scale(
-                        scale: 1.03,
-                        child: SizedBox(
-                          width: 280,
-                          child: TaskCardWidget(
-                            tarea: tarea,
-                            tablero: tablero,
+              // Lista de tarjetas con scroll vertical independiente
+              Expanded(
+                child: tareas.isEmpty
+                    ? Container(
+                        height: 100,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: isHovered ? colorHeader : Colors.grey.shade300,
+                            style: BorderStyle.none,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          isHovered ? 'Soltar aquí' : 'Sin tareas en esta columna',
+                          style: TextStyle(
+                            color: isHovered ? colorHeader : Colors.grey.shade400,
+                            fontWeight: isHovered ? FontWeight.bold : FontWeight.normal,
+                            fontSize: 12,
                           ),
                         ),
+                      )
+                    : SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: tareas.map((tarea) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: LongPressDraggable<Tarea>(
+                              data: tarea,
+                              maxSimultaneousDrags: permisos.moverTareas ? 1 : 0,
+                              delay: const Duration(milliseconds: 150),
+                              hapticFeedbackOnStart: true,
+                              axis: null,
+                              feedback: Material(
+                                type: MaterialType.transparency,
+                                child: Transform.scale(
+                                  scale: 1.03,
+                                  child: SizedBox(
+                                    width: 280,
+                                    child: TaskCardWidget(
+                                      tarea: tarea,
+                                      tablero: tablero,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              childWhenDragging: Opacity(
+                                opacity: 0.3,
+                                child: TaskCardWidget(
+                                  tarea: tarea,
+                                  tablero: tablero,
+                                ),
+                              ),
+                              child: GestureDetector(
+                                onTap: () {
+                                  showModalBottomSheet(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    backgroundColor: Colors.white,
+                                    shape: const RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                                    ),
+                                    builder: (context) => DetalleTareaWidget(
+                                      tarea: tarea,
+                                      tablero: tablero,
+                                    ),
+                                  );
+                                },
+                                child: TaskCardWidget(
+                                  tarea: tarea,
+                                  tablero: tablero,
+                                ),
+                              ),
+                            ),
+                          )).toList(),
+                        ),
                       ),
-                    ),
-                    childWhenDragging: Opacity(
-                      opacity: 0.3,
-                      child: TaskCardWidget(
-                        tarea: tarea,
-                        tablero: tablero,
-                      ),
-                    ),
-                    child: GestureDetector(
-                      onTap: () {
-                        showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          backgroundColor: Colors.white,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                          ),
-                          builder: (context) => DetalleTareaWidget(
-                            tarea: tarea,
-                            tablero: tablero,
-                          ),
-                        );
-                      },
-                      child: TaskCardWidget(
-                        tarea: tarea,
-                        tablero: tablero,
-                      ),
-                    ),
-                  ),
-                )),
+              ),
             ],
           ),
         );
@@ -548,12 +560,11 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
     if (tableroActivo == null) return;
 
     final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-    final permisos = tableroActivo.obtenerPermisosDeUsuario(uid);
 
-    if (!permisos.editarTablero && !permisos.administrarMiembros) {
+    if (!tableroActivo.esAdminOCreador(uid)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No tienes permiso para editar la configuración de este tablero'),
+          content: Text('Solo el dueño o los administradores pueden acceder a los ajustes del tablero'),
           backgroundColor: Colors.redAccent,
         ),
       );

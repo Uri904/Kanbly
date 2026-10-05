@@ -44,6 +44,59 @@ extension EstadoTareaExtension on EstadoTarea {
   }
 }
 
+/// Representa un archivo adjunto a una tarea (Imagen, Video, Documento)
+class AdjuntoTarea {
+  final String id;
+  final String nombre;
+  final String url;
+  final String tipo; // 'imagen', 'video', 'documento'
+  final int tamanoBytes;
+  final DateTime fechaAdjunto;
+
+  const AdjuntoTarea({
+    required this.id,
+    required this.nombre,
+    required this.url,
+    required this.tipo,
+    required this.tamanoBytes,
+    required this.fechaAdjunto,
+  });
+
+  String get tamanoLegible {
+    if (tamanoBytes < 1024) return '$tamanoBytes B';
+    if (tamanoBytes < 1024 * 1024) {
+      return '${(tamanoBytes / 1024).toStringAsFixed(1)} KB';
+    }
+    return '${(tamanoBytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  factory AdjuntoTarea.fromMap(Map<String, dynamic> map) {
+    return AdjuntoTarea(
+      id: map['id']?.toString() ?? '',
+      nombre: map['nombre']?.toString() ?? 'Archivo',
+      url: map['url']?.toString() ?? '',
+      tipo: map['tipo']?.toString() ?? 'documento',
+      tamanoBytes: map['tamanoBytes'] is int
+          ? map['tamanoBytes']
+          : int.tryParse(map['tamanoBytes']?.toString() ?? '') ?? 0,
+      fechaAdjunto: map['fechaAdjunto'] is Timestamp
+          ? (map['fechaAdjunto'] as Timestamp).toDate()
+          : DateTime.tryParse(map['fechaAdjunto']?.toString() ?? '') ?? DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'nombre': nombre,
+      'url': url,
+      'tipo': tipo,
+      'tamanoBytes': tamanoBytes,
+      'fechaAdjunto': Timestamp.fromDate(fechaAdjunto),
+    };
+  }
+}
+
 class Tarea {
   final String id;
   final String titulo;
@@ -57,6 +110,7 @@ class Tarea {
   final DateTime? fechaVencimiento;
   final DateTime? fechaActualizacion;
   final List<String> etiquetas;
+  final List<AdjuntoTarea> adjuntos;
   final int prioridad; // 1 = baja, 2 = media, 3 = alta
   final bool archivada;
   final String? creadaPor;
@@ -75,6 +129,7 @@ class Tarea {
     this.fechaVencimiento,
     this.fechaActualizacion,
     this.etiquetas = const [],
+    this.adjuntos = const [],
     this.prioridad = 2,
     this.archivada = false,
     this.creadaPor,
@@ -117,6 +172,15 @@ class Tarea {
     final estadoStr = map['estado']?.toString() ?? 'Pendiente';
     final tituloStr = map['titulo']?.toString() ?? 'Tarea sin título';
 
+    List<AdjuntoTarea> adjuntosList = [];
+    if (map['adjuntos'] != null && map['adjuntos'] is List) {
+      for (final item in (map['adjuntos'] as List)) {
+        if (item is Map) {
+          adjuntosList.add(AdjuntoTarea.fromMap(Map<String, dynamic>.from(item)));
+        }
+      }
+    }
+
     return Tarea(
       id: id,
       titulo: tituloStr.trim().isNotEmpty ? tituloStr : 'Tarea sin título',
@@ -130,6 +194,7 @@ class Tarea {
       fechaVencimiento: _parseFecha(map['fechaVencimiento']),
       fechaActualizacion: _parseFecha(map['fechaActualizacion']),
       etiquetas: List<String>.from(map['etiquetas'] ?? []),
+      adjuntos: adjuntosList,
       prioridad: _parsePrioridad(map['prioridad']),
       archivada: map['archivada'] ?? false,
       creadaPor: map['creadaPor']?.toString(),
@@ -153,6 +218,7 @@ class Tarea {
           ? Timestamp.fromDate(fechaActualizacion!)
           : null,
       'etiquetas': etiquetas,
+      'adjuntos': adjuntos.map((a) => a.toMap()).toList(),
       'prioridad': prioridad,
       'archivada': archivada,
       'creadaPor': creadaPor,
@@ -173,6 +239,7 @@ class Tarea {
     DateTime? fechaVencimiento,
     DateTime? fechaActualizacion,
     List<String>? etiquetas,
+    List<AdjuntoTarea>? adjuntos,
     int? prioridad,
     bool? archivada,
     String? creadaPor,
@@ -191,6 +258,7 @@ class Tarea {
       fechaVencimiento: fechaVencimiento ?? this.fechaVencimiento,
       fechaActualizacion: fechaActualizacion ?? this.fechaActualizacion,
       etiquetas: etiquetas ?? this.etiquetas,
+      adjuntos: adjuntos ?? this.adjuntos,
       prioridad: prioridad ?? this.prioridad,
       archivada: archivada ?? this.archivada,
       creadaPor: creadaPor ?? this.creadaPor,

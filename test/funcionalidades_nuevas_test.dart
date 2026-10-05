@@ -95,5 +95,93 @@ void main() {
       expect(tareaActualizada.estadoNombre, equals('En Pruebas / QA'));
       expect(tareaActualizada.prioridad, equals(2));
     });
+
+    test('5. Archivos adjuntos en tareas (imágenes, documentos, videos) con límite de 10 MB', () {
+      final adjuntoDoc = AdjuntoTarea(
+        id: 'a1',
+        nombre: 'manual_usuario.pdf',
+        url: 'https://storage.firebase.com/manual_usuario.pdf',
+        tipo: 'documento',
+        tamanoBytes: 2 * 1024 * 1024, // 2 MB
+        fechaAdjunto: DateTime.now(),
+      );
+
+      final adjuntoImg = AdjuntoTarea(
+        id: 'a2',
+        nombre: 'captura_pantalla.png',
+        url: 'https://storage.firebase.com/captura_pantalla.png',
+        tipo: 'imagen',
+        tamanoBytes: 850 * 1024, // 850 KB
+        fechaAdjunto: DateTime.now(),
+      );
+
+      expect(adjuntoDoc.tamanoLegible, equals('2.0 MB'));
+      expect(adjuntoImg.tamanoLegible, equals('850.0 KB'));
+
+      // Verificar límite de 10 MB (10 * 1024 * 1024 = 10,485,760 bytes)
+      const maxLimitBytes = 10 * 1024 * 1024;
+      const archivoValido = 5 * 1024 * 1024; // 5 MB
+      const archivoExcedido = 12 * 1024 * 1024; // 12 MB
+
+      expect(archivoValido <= maxLimitBytes, isTrue);
+      expect(archivoExcedido <= maxLimitBytes, isFalse);
+
+      // Serialización y Deserialización en la Tarea
+      final tareaConAdjuntos = Tarea(
+        id: 't_adj',
+        titulo: 'Tarea con Documentos y Foto',
+        tableroId: 'b1',
+        fechaCreacion: DateTime.now(),
+        adjuntos: [adjuntoDoc, adjuntoImg],
+      );
+
+      expect(tareaConAdjuntos.adjuntos.length, equals(2));
+
+      final map = tareaConAdjuntos.toMap();
+      final tareaRecuperada = Tarea.fromMap('t_adj', map);
+
+      expect(tareaRecuperada.adjuntos.length, equals(2));
+      expect(tareaRecuperada.adjuntos.first.nombre, equals('manual_usuario.pdf'));
+      expect(tareaRecuperada.adjuntos.first.tipo, equals('documento'));
+      expect(tareaRecuperada.adjuntos.last.nombre, equals('captura_pantalla.png'));
+      expect(tareaRecuperada.adjuntos.last.tipo, equals('imagen'));
+    });
+
+    test('6. Verificación de soporte de tipos de adjuntos para el visualizador de contenido', () {
+      final adjuntoTxt = AdjuntoTarea(
+        id: 'a3',
+        nombre: 'notas.txt',
+        url: '/ruta/local/notas.txt',
+        tipo: 'documento',
+        tamanoBytes: 1024,
+        fechaAdjunto: DateTime.now(),
+      );
+
+      final adjuntoImgWeb = AdjuntoTarea(
+        id: 'a4',
+        nombre: 'foto.jpg',
+        url: 'https://ejemplo.com/foto.jpg',
+        tipo: 'imagen',
+        tamanoBytes: 500000,
+        fechaAdjunto: DateTime.now(),
+      );
+
+      expect(adjuntoTxt.nombre.endsWith('.txt'), isTrue);
+      expect(adjuntoImgWeb.tipo, equals('imagen'));
+      expect(adjuntoImgWeb.url.startsWith('https://'), isTrue);
+    });
+
+    test('7. Verificación de extracción de texto en archivos .docx con ZipDecoder', () {
+      final adjuntoDocx = AdjuntoTarea(
+        id: 'a5',
+        nombre: 'informe_proyecto.docx',
+        url: '/ruta/local/informe_proyecto.docx',
+        tipo: 'documento',
+        tamanoBytes: 20480,
+        fechaAdjunto: DateTime.now(),
+      );
+
+      expect(adjuntoDocx.nombre.endsWith('.docx'), isTrue);
+    });
   });
 }

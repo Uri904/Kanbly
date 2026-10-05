@@ -36,6 +36,9 @@ dependencies:
   provider:
   email_validator:
   image_picker:
+  file_picker: ^8.1.7
+  archive: ^3.6.1
+  open_filex: ^4.6.0
 
   intl: ^0.20.2
 
