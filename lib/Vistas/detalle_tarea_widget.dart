@@ -11,7 +11,6 @@ import '../modelo/usuario.dart';
 import '../servicios/firestore_service.dart';
 import '../utilerias/formato_util.dart';
 import 'pantalla_visualizador_adjunto.dart';
-import 'visualizador_adjunto_dialog.dart';
 
 class DetalleTareaWidget extends StatefulWidget {
   final Tarea tarea;

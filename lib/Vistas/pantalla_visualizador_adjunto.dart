@@ -1,13 +1,16 @@
-import 'dart:convert';
 import 'dart:io';
-import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:open_filex/open_filex.dart';
 import '../modelo/tarea.dart';
+import 'widgets_visualizador/visor_pdf.dart';
+import 'widgets_visualizador/visor_video.dart';
+import 'widgets_visualizador/visor_docx.dart';
+import 'widgets_visualizador/visor_excel.dart';
+import 'widgets_visualizador/visor_imagen.dart';
 
-/// Pantalla completa para visualizar el contenido de archivos adjuntos (Word, Imágenes, Texto, etc.)
-/// y permitir abrirlos o editarlos con aplicaciones externas como Microsoft Word o Lectores de PDF.
+/// Pantalla completa para visualizar el contenido de archivos adjuntos (Word, PDF, Videos, Imágenes, Excel, etc.)
+/// conservando todo el formato original y permitiendo abrirlos o editarlos con aplicaciones externas.
 class PantallaVisualizadorAdjunto extends StatelessWidget {
   final AdjuntoTarea adjunto;
 
@@ -31,14 +34,21 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
     final nombre = adjunto.nombre.toLowerCase();
     final url = adjunto.url.toLowerCase();
     return tipo == 'imagen' ||
-        ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'].any((ext) => nombre.endsWith(ext) || url.endsWith(ext));
+        ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.svg'].any((ext) => nombre.endsWith(ext) || url.endsWith(ext));
   }
 
-  bool _esTexto() {
+  bool _esVideo() {
+    final tipo = adjunto.tipo.toLowerCase();
     final nombre = adjunto.nombre.toLowerCase();
     final url = adjunto.url.toLowerCase();
-    return ['.txt', '.json', '.csv', '.md', '.log', '.xml', '.html', '.dart', '.yaml', '.yml', '.js', '.css']
-        .any((ext) => nombre.endsWith(ext) || url.endsWith(ext));
+    return tipo == 'video' ||
+        ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.3gp'].any((ext) => nombre.endsWith(ext) || url.endsWith(ext));
+  }
+
+  bool _esPdf() {
+    final nombre = adjunto.nombre.toLowerCase();
+    final url = adjunto.url.toLowerCase();
+    return nombre.endsWith('.pdf') || url.endsWith('.pdf');
   }
 
   bool _esDocx() {
@@ -47,41 +57,17 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
     return nombre.endsWith('.docx') || url.endsWith('.docx') || nombre.endsWith('.doc') || url.endsWith('.doc');
   }
 
-  String _extraerTextoDocx(File archivoLocal) {
-    try {
-      final bytes = archivoLocal.readAsBytesSync();
-      final archive = ZipDecoder().decodeBytes(bytes);
-      final docFile = archive.findFile('word/document.xml');
-      if (docFile == null) {
-        return 'No se pudo encontrar la estructura "word/document.xml" en el archivo .docx.';
-      }
+  bool _esExcel() {
+    final nombre = adjunto.nombre.toLowerCase();
+    final url = adjunto.url.toLowerCase();
+    return nombre.endsWith('.xlsx') || url.endsWith('.xlsx') || nombre.endsWith('.xls') || url.endsWith('.xls') || nombre.endsWith('.csv');
+  }
 
-      final contentBytes = docFile.content as List<int>;
-      final xmlString = utf8.decode(contentBytes, allowMalformed: true);
-
-      // Reemplazar párrafos por saltos de línea doble
-      final xmlConSaltos = xmlString.replaceAll(RegExp(r'</w:p>'), '\n\n');
-
-      // Eliminar todas las etiquetas XML
-      String textoLimpio = xmlConSaltos.replaceAll(RegExp(r'<[^>]*>'), '');
-
-      // Decodificar entidades XML comunes
-      textoLimpio = textoLimpio
-          .replaceAll('&lt;', '<')
-          .replaceAll('&gt;', '>')
-          .replaceAll('&amp;', '&')
-          .replaceAll('&quot;', '"')
-          .replaceAll('&apos;', "'");
-
-      textoLimpio = textoLimpio.trim();
-      if (textoLimpio.isEmpty) {
-        return 'El documento está vacío o no contiene texto editable.';
-      }
-
-      return textoLimpio;
-    } catch (e) {
-      return 'Error al extraer el contenido del archivo Word: $e';
-    }
+  bool _esTexto() {
+    final nombre = adjunto.nombre.toLowerCase();
+    final url = adjunto.url.toLowerCase();
+    return ['.txt', '.json', '.md', '.log', '.xml', '.html', '.dart', '.yaml', '.yml', '.js', '.css']
+        .any((ext) => nombre.endsWith(ext) || url.endsWith(ext));
   }
 
   Future<void> _abrirConAppExterna(BuildContext context) async {
@@ -144,22 +130,18 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
 
   IconData _obtenerIconoGeneral(String tipo) {
     if (_esDocx()) return Icons.description_rounded;
-    switch (tipo.toLowerCase()) {
-      case 'imagen':
-        return Icons.image_rounded;
-      case 'video':
-        return Icons.videocam_rounded;
-      case 'documento':
-      default:
-        return Icons.article_rounded;
-    }
+    if (_esPdf()) return Icons.picture_as_pdf_rounded;
+    if (_esExcel()) return Icons.table_chart_rounded;
+    if (_esVideo()) return Icons.videocam_rounded;
+    if (_esImagen()) return Icons.image_rounded;
+    return Icons.article_rounded;
   }
 
   @override
   Widget build(BuildContext context) {
     const Color azulCielo = Color(0xFF52ABEB);
     const Color verdeTurquesa = Color(0xFF63D0A1);
-    final esFondoOscuro = _esImagen() || _esTexto();
+    final esFondoOscuro = _esImagen() || _esTexto() || _esVideo();
 
     File? archivoLocal;
     try {
@@ -252,7 +234,7 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
                 ),
                 icon: const Icon(Icons.edit_document, size: 20),
                 label: const Text(
-                  'Abrir / Editar en Word o app externa',
+                  'Abrir / Editar con aplicación externa',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                 ),
                 onPressed: () => _abrirConAppExterna(context),
@@ -265,114 +247,52 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
   }
 
   Widget _buildCuerpoVisualizador(BuildContext context, File? archivoLocal) {
-    // 1. VISUALIZACIÓN DE DOCUMENTOS WORD (.DOCX)
-    if (_esDocx() && archivoLocal != null) {
-      final textoDocx = _extraerTextoDocx(archivoLocal);
-      return Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            // ENCABEZADO FORMATO HOJA WORD
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              decoration: const BoxDecoration(
-                color: Color(0xFF2B579A), // Color azul clásico de Microsoft Word
-                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.description_rounded, color: Colors.white, size: 24),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          adjunto.nombre,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const Text(
-                          'Documento Microsoft Word • Vista de Lectura',
-                          style: TextStyle(fontSize: 11, color: Colors.white70),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // CUERPO HOJA DIGITAL
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: SingleChildScrollView(
-                  child: SelectableText(
-                    textoDocx,
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      color: const Color(0xFF1E293B),
-                      height: 1.6,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+    // 1. VISUALIZACIÓN DE DOCUMENTOS WORD (.DOCX) CON FORMATO COMPLETO
+    if (_esDocx()) {
+      return VisorDocx(
+        archivoLocal: archivoLocal,
+        urlRemota: adjunto.url,
+        nombreArchivo: adjunto.nombre,
       );
     }
 
-    // 2. VISUALIZACIÓN DE IMÁGENES
-    if (_esImagen()) {
-      if (archivoLocal != null) {
-        return Center(
-          child: InteractiveViewer(
-            maxScale: 4.0,
-            child: Image.file(
-              archivoLocal,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) => _buildErrorCard('No se pudo cargar la imagen local.'),
-            ),
-          ),
-        );
-      } else if (adjunto.url.startsWith('http://') || adjunto.url.startsWith('https://')) {
-        return Center(
-          child: InteractiveViewer(
-            maxScale: 4.0,
-            child: Image.network(
-              adjunto.url,
-              fit: BoxFit.contain,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return const Center(child: CircularProgressIndicator(color: Colors.white));
-              },
-              errorBuilder: (context, error, stackTrace) => _buildErrorCard('Error al descargar la imagen remota.'),
-            ),
-          ),
-        );
-      }
+    // 2. VISUALIZACIÓN DE DOCUMENTOS PDF CON PAGINACIÓN Y ZOOM
+    if (_esPdf()) {
+      return VisorPdf(
+        archivoLocal: archivoLocal,
+        urlRemota: adjunto.url,
+        nombreArchivo: adjunto.nombre,
+      );
     }
 
-    // 3. VISUALIZACIÓN DE ARCHIVOS DE TEXTO Y CÓDIGO
+    // 3. VISUALIZACIÓN DE VIDEOS CON REPRODUCTOR INTERACTIVO
+    if (_esVideo()) {
+      return VisorVideo(
+        archivoLocal: archivoLocal,
+        urlRemota: adjunto.url,
+        nombreArchivo: adjunto.nombre,
+      );
+    }
+
+    // 4. VISUALIZACIÓN DE HOJAS DE CÁLCULO EXCEL Y CSV
+    if (_esExcel()) {
+      return VisorExcel(
+        archivoLocal: archivoLocal,
+        urlRemota: adjunto.url,
+        nombreArchivo: adjunto.nombre,
+      );
+    }
+
+    // 5. VISUALIZACIÓN DE IMÁGENES CON GESTOS Y ROTACIÓN
+    if (_esImagen()) {
+      return VisorImagen(
+        archivoLocal: archivoLocal,
+        urlRemota: adjunto.url,
+        nombreArchivo: adjunto.nombre,
+      );
+    }
+
+    // 6. VISUALIZACIÓN DE ARCHIVOS DE TEXTO Y CÓDIGO
     if (_esTexto() && archivoLocal != null) {
       try {
         String texto = archivoLocal.readAsStringSync();
@@ -397,12 +317,10 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
             ),
           ),
         );
-      } catch (e) {
-        // Fallback
-      }
+      } catch (_) {}
     }
 
-    // 4. TARJETA DE INFORMACIÓN DETALLADA PARA OTROS ARCHIVOS (PDF, DOC, VIDEO, ETC.)
+    // 7. TARJETA INFORMATIVA PARA OTROS TIPOS DE ARCHIVO
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -478,26 +396,9 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
             icon: const Icon(Icons.open_in_new_rounded, size: 18),
-            label: const Text('Abrir con aplicación instalada (Word / PDF Reader)', style: TextStyle(fontWeight: FontWeight.bold)),
+            label: const Text('Abrir con aplicación instalada', style: TextStyle(fontWeight: FontWeight.bold)),
             onPressed: () => _abrirConAppExterna(context),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorCard(String mensaje) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.red.shade50,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.error_outline_rounded, color: Colors.redAccent),
-          const SizedBox(width: 10),
-          Expanded(child: Text(mensaje, style: const TextStyle(fontSize: 12, color: Colors.redAccent))),
         ],
       ),
     );

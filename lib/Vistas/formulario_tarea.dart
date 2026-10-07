@@ -10,7 +10,6 @@ import '../modelo/tablero.dart';
 import '../modelo/usuario.dart';
 import '../servicios/firestore_service.dart';
 import 'pantalla_visualizador_adjunto.dart';
-import 'visualizador_adjunto_dialog.dart';
 
 class FormularioTarea extends StatefulWidget {
   final Tablero tablero;
