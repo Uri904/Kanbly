@@ -5,8 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// Visor nativo e interactivo para archivos PDF (.pdf) con soporte para
-/// paginación, indicador de páginas, controles de navegación y descarga
-/// automática de archivos desde URLs de red.
+/// delimitación clara de páginas sobre un fondo contrastante tenue, bordes de hoja,
+/// sombras de papel, paginación, indicador de páginas y controles de navegación.
 class VisorPdf extends StatefulWidget {
   final File? archivoLocal;
   final String urlRemota;
@@ -99,6 +99,7 @@ class _VisorPdfState extends State<VisorPdf> {
       return Container(
         height: 300,
         alignment: Alignment.center,
+        color: const Color(0xFF0F172A),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -106,7 +107,7 @@ class _VisorPdfState extends State<VisorPdf> {
             const SizedBox(height: 16),
             Text(
               'Cargando documento PDF...',
-              style: GoogleFonts.inter(fontSize: 13, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
+              style: GoogleFonts.inter(fontSize: 13, color: Colors.white70, fontWeight: FontWeight.w500),
             ),
           ],
         ),
@@ -149,11 +150,11 @@ class _VisorPdfState extends State<VisorPdf> {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFF0F172A), // Fondo oscuro tenue de mesa de trabajo
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
+            color: Colors.black.withValues(alpha: 0.2),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -164,12 +165,12 @@ class _VisorPdfState extends State<VisorPdf> {
         children: [
           // BARRA SUPERIOR DE CONTROL DE PAGINACIÓN PDF
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             color: const Color(0xFF1E293B),
             child: Row(
               children: [
-                const Icon(Icons.picture_as_pdf_rounded, color: Colors.redAccent, size: 20),
-                const SizedBox(width: 8),
+                const Icon(Icons.picture_as_pdf_rounded, color: Colors.redAccent, size: 22),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     widget.nombreArchivo,
@@ -184,6 +185,7 @@ class _VisorPdfState extends State<VisorPdf> {
                     decoration: BoxDecoration(
                       color: Colors.white12,
                       borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white24),
                     ),
                     child: Text(
                       'Pág. ${_paginaActual + 1} de $_totalPaginas',
@@ -217,51 +219,70 @@ class _VisorPdfState extends State<VisorPdf> {
             ),
           ),
 
-          // VISTA PRINCIPAL PDFVIEW
+          // VISTA PRINCIPAL CON MARCO DE HOJA DE PAPEL Y DEGRADADO
           Expanded(
-            child: Stack(
-              children: [
-                PDFView(
-                  filePath: _pathLocalDefinitivo!,
-                  enableSwipe: true,
-                  swipeHorizontal: false,
-                  autoSpacing: true,
-                  pageFling: true,
-                  pageSnap: true,
-                  fitPolicy: FitPolicy.WIDTH,
-                  preventLinkNavigation: false,
-                  onRender: (pages) {
-                    setState(() {
-                      _totalPaginas = pages ?? 0;
-                      _pdfListo = true;
-                    });
-                  },
-                  onError: (error) {
-                    setState(() {
-                      _mensajeError = error.toString();
-                    });
-                  },
-                  onPageError: (page, error) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error en página $page: $error')),
-                    );
-                  },
-                  onViewCreated: (PDFViewController pdfViewController) {
-                    _pdfViewController = pdfViewController;
-                  },
-                  onPageChanged: (int? page, int? total) {
-                    if (page != null) {
-                      setState(() {
-                        _paginaActual = page;
-                      });
-                    }
-                  },
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0xFFCBD5E1), width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      blurRadius: 14,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
                 ),
-                if (!_pdfListo)
-                  const Center(
-                    child: CircularProgressIndicator(color: Color(0xFF52ABEB)),
-                  ),
-              ],
+                clipBehavior: Clip.antiAlias,
+                child: Stack(
+                  children: [
+                    PDFView(
+                      filePath: _pathLocalDefinitivo!,
+                      backgroundColor: const Color(0xFF0F172A),
+                      enableSwipe: true,
+                      swipeHorizontal: false,
+                      autoSpacing: true,
+                      pageFling: true,
+                      pageSnap: true,
+                      fitPolicy: FitPolicy.WIDTH,
+                      preventLinkNavigation: false,
+                      onRender: (pages) {
+                        setState(() {
+                          _totalPaginas = pages ?? 0;
+                          _pdfListo = true;
+                        });
+                      },
+                      onError: (error) {
+                        setState(() {
+                          _mensajeError = error.toString();
+                        });
+                      },
+                      onPageError: (page, error) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error en página $page: $error')),
+                        );
+                      },
+                      onViewCreated: (PDFViewController pdfViewController) {
+                        _pdfViewController = pdfViewController;
+                      },
+                      onPageChanged: (int? page, int? total) {
+                        if (page != null) {
+                          setState(() {
+                            _paginaActual = page;
+                          });
+                        }
+                      },
+                    ),
+                    if (!_pdfListo)
+                      const Center(
+                        child: CircularProgressIndicator(color: Color(0xFF52ABEB)),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         ],

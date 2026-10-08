@@ -439,10 +439,10 @@ class _FormularioTareaState extends State<FormularioTarea> {
                 ListTile(
                   leading: const CircleAvatar(backgroundColor: Color(0xFFF0FDF4), child: Icon(Icons.description_rounded, color: Color(0xFF63D0A1))),
                   title: const Text('Documento / PDF'),
-                  subtitle: const Text('PDF, DOC, DOCX, TXT, XLS'),
+                  subtitle: const Text('PDF, DOC, DOCX, XLSX, PPTX, TXT'),
                   onTap: () {
                     Navigator.pop(context);
-                    _seleccionarArchivo(FileType.custom, 'documento', extensiones: ['pdf', 'doc', 'docx', 'txt', 'xls', 'xlsx']);
+                    _seleccionarArchivo(FileType.custom, 'documento', extensiones: ['pdf', 'doc', 'docx', 'txt', 'xls', 'xlsx', 'csv', 'pptx', 'ppt']);
                   },
                 ),
                 ListTile(

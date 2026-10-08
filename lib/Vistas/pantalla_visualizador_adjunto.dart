@@ -7,9 +7,10 @@ import 'widgets_visualizador/visor_pdf.dart';
 import 'widgets_visualizador/visor_video.dart';
 import 'widgets_visualizador/visor_docx.dart';
 import 'widgets_visualizador/visor_excel.dart';
+import 'widgets_visualizador/visor_pptx.dart';
 import 'widgets_visualizador/visor_imagen.dart';
 
-/// Pantalla completa para visualizar el contenido de archivos adjuntos (Word, PDF, Videos, Imágenes, Excel, etc.)
+/// Pantalla completa para visualizar el contenido de archivos adjuntos (Word, PDF, Videos, Imágenes, Excel, PowerPoint, etc.)
 /// conservando todo el formato original y permitiendo abrirlos o editarlos con aplicaciones externas.
 class PantallaVisualizadorAdjunto extends StatelessWidget {
   final AdjuntoTarea adjunto;
@@ -63,6 +64,12 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
     return nombre.endsWith('.xlsx') || url.endsWith('.xlsx') || nombre.endsWith('.xls') || url.endsWith('.xls') || nombre.endsWith('.csv');
   }
 
+  bool _esPptx() {
+    final nombre = adjunto.nombre.toLowerCase();
+    final url = adjunto.url.toLowerCase();
+    return nombre.endsWith('.pptx') || url.endsWith('.pptx') || nombre.endsWith('.ppt') || url.endsWith('.ppt');
+  }
+
   bool _esTexto() {
     final nombre = adjunto.nombre.toLowerCase();
     final url = adjunto.url.toLowerCase();
@@ -95,7 +102,7 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
         } else if (result.type == ResultType.noAppToOpen) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('No se encontró una aplicación compatible instalada para abrir ${adjunto.nombre}. Instala Microsoft Word o un visor apropiado.'),
+              content: Text('No se encontró una aplicación compatible instalada para abrir ${adjunto.nombre}. Instala Microsoft Office o un visor apropiado.'),
               backgroundColor: Colors.orange,
               duration: const Duration(seconds: 4),
             ),
@@ -132,6 +139,7 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
     if (_esDocx()) return Icons.description_rounded;
     if (_esPdf()) return Icons.picture_as_pdf_rounded;
     if (_esExcel()) return Icons.table_chart_rounded;
+    if (_esPptx()) return Icons.slideshow_rounded;
     if (_esVideo()) return Icons.videocam_rounded;
     if (_esImagen()) return Icons.image_rounded;
     return Icons.article_rounded;
@@ -141,7 +149,7 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
   Widget build(BuildContext context) {
     const Color azulCielo = Color(0xFF52ABEB);
     const Color verdeTurquesa = Color(0xFF63D0A1);
-    final esFondoOscuro = _esImagen() || _esTexto() || _esVideo();
+    final esFondoOscuro = _esImagen() || _esTexto() || _esVideo() || _esDocx() || _esPdf() || _esPptx();
 
     File? archivoLocal;
     try {
@@ -247,7 +255,7 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
   }
 
   Widget _buildCuerpoVisualizador(BuildContext context, File? archivoLocal) {
-    // 1. VISUALIZACIÓN DE DOCUMENTOS WORD (.DOCX) CON FORMATO COMPLETO
+    // 1. VISUALIZACIÓN DE DOCUMENTOS WORD (.DOCX)
     if (_esDocx()) {
       return VisorDocx(
         archivoLocal: archivoLocal,
@@ -256,7 +264,7 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
       );
     }
 
-    // 2. VISUALIZACIÓN DE DOCUMENTOS PDF CON PAGINACIÓN Y ZOOM
+    // 2. VISUALIZACIÓN DE DOCUMENTOS PDF
     if (_esPdf()) {
       return VisorPdf(
         archivoLocal: archivoLocal,
@@ -265,7 +273,16 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
       );
     }
 
-    // 3. VISUALIZACIÓN DE VIDEOS CON REPRODUCTOR INTERACTIVO
+    // 3. VISUALIZACIÓN DE PRESENTACIONES POWERPOINT (.PPTX)
+    if (_esPptx()) {
+      return VisorPptx(
+        archivoLocal: archivoLocal,
+        urlRemota: adjunto.url,
+        nombreArchivo: adjunto.nombre,
+      );
+    }
+
+    // 4. VISUALIZACIÓN DE VIDEOS
     if (_esVideo()) {
       return VisorVideo(
         archivoLocal: archivoLocal,
@@ -274,7 +291,7 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
       );
     }
 
-    // 4. VISUALIZACIÓN DE HOJAS DE CÁLCULO EXCEL Y CSV
+    // 5. VISUALIZACIÓN DE HOJAS DE CÁLCULO EXCEL Y CSV
     if (_esExcel()) {
       return VisorExcel(
         archivoLocal: archivoLocal,
@@ -283,7 +300,7 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
       );
     }
 
-    // 5. VISUALIZACIÓN DE IMÁGENES CON GESTOS Y ROTACIÓN
+    // 6. VISUALIZACIÓN DE IMÁGENES
     if (_esImagen()) {
       return VisorImagen(
         archivoLocal: archivoLocal,
@@ -292,7 +309,7 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
       );
     }
 
-    // 6. VISUALIZACIÓN DE ARCHIVOS DE TEXTO Y CÓDIGO
+    // 7. VISUALIZACIÓN DE ARCHIVOS DE TEXTO Y CÓDIGO
     if (_esTexto() && archivoLocal != null) {
       try {
         String texto = archivoLocal.readAsStringSync();
@@ -320,7 +337,7 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
       } catch (_) {}
     }
 
-    // 7. TARJETA INFORMATIVA PARA OTROS TIPOS DE ARCHIVO
+    // 8. TARJETA INFORMATIVA PARA OTROS TIPOS DE ARCHIVO
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),

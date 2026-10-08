@@ -7,10 +7,11 @@ import 'widgets_visualizador/visor_pdf.dart';
 import 'widgets_visualizador/visor_video.dart';
 import 'widgets_visualizador/visor_docx.dart';
 import 'widgets_visualizador/visor_excel.dart';
+import 'widgets_visualizador/visor_pptx.dart';
 import 'widgets_visualizador/visor_imagen.dart';
 
 /// Diálogo modal para visualizar el contenido de los archivos adjuntos en tareas
-/// con vista previa enriquecida (Word, PDF, Video, Imagen, Excel) y opción de pantalla completa.
+/// con vista previa enriquecida (Word, PDF, Video, Imagen, Excel, PowerPoint) y opción de pantalla completa.
 class VisualizadorAdjuntoDialog extends StatelessWidget {
   final AdjuntoTarea adjunto;
 
@@ -61,6 +62,12 @@ class VisualizadorAdjuntoDialog extends StatelessWidget {
     return nombre.endsWith('.xlsx') || url.endsWith('.xlsx') || nombre.endsWith('.xls') || url.endsWith('.xls') || nombre.endsWith('.csv');
   }
 
+  bool _esPptx() {
+    final nombre = adjunto.nombre.toLowerCase();
+    final url = adjunto.url.toLowerCase();
+    return nombre.endsWith('.pptx') || url.endsWith('.pptx') || nombre.endsWith('.ppt') || url.endsWith('.ppt');
+  }
+
   bool _esTexto() {
     final nombre = adjunto.nombre.toLowerCase();
     final url = adjunto.url.toLowerCase();
@@ -102,7 +109,19 @@ class VisualizadorAdjuntoDialog extends StatelessWidget {
       );
     }
 
-    // 3. VIDEO REPRODUCTOR INTERACTIVO
+    // 3. POWERPOINT (.PPTX)
+    if (_esPptx()) {
+      return SizedBox(
+        height: 350,
+        child: VisorPptx(
+          archivoLocal: archivoLocal,
+          urlRemota: adjunto.url,
+          nombreArchivo: adjunto.nombre,
+        ),
+      );
+    }
+
+    // 4. VIDEO REPRODUCTOR INTERACTIVO
     if (_esVideo()) {
       return SizedBox(
         height: 320,
@@ -114,7 +133,7 @@ class VisualizadorAdjuntoDialog extends StatelessWidget {
       );
     }
 
-    // 4. EXCEL / HOJAS DE CÁLCULO
+    // 5. EXCEL / HOJAS DE CÁLCULO
     if (_esExcel()) {
       return SizedBox(
         height: 350,
@@ -126,7 +145,7 @@ class VisualizadorAdjuntoDialog extends StatelessWidget {
       );
     }
 
-    // 5. IMÁGENES
+    // 6. IMÁGENES
     if (_esImagen()) {
       return SizedBox(
         height: 320,
@@ -138,7 +157,7 @@ class VisualizadorAdjuntoDialog extends StatelessWidget {
       );
     }
 
-    // 6. ARCHIVOS DE TEXTO Y CÓDIGO
+    // 7. ARCHIVOS DE TEXTO Y CÓDIGO
     if (_esTexto() && archivoLocal != null) {
       try {
         String texto = archivoLocal.readAsStringSync();
@@ -163,7 +182,7 @@ class VisualizadorAdjuntoDialog extends StatelessWidget {
       } catch (_) {}
     }
 
-    // 7. TARJETA DE INFORMACIÓN GENERAL
+    // 8. TARJETA DE INFORMACIÓN GENERAL
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -212,6 +231,7 @@ class VisualizadorAdjuntoDialog extends StatelessWidget {
     if (_esDocx()) return Icons.description_rounded;
     if (_esPdf()) return Icons.picture_as_pdf_rounded;
     if (_esExcel()) return Icons.table_chart_rounded;
+    if (_esPptx()) return Icons.slideshow_rounded;
     if (_esVideo()) return Icons.videocam_rounded;
     if (_esImagen()) return Icons.image_rounded;
     return Icons.article_rounded;

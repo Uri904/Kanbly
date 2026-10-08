@@ -6,7 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 /// Visor y reproductor de video nativo e interactivo (.mp4, .mov, .avi, .mkv, etc.)
 /// con controles completos de reproducción, línea de tiempo (seek), tiempo transcurrido,
-/// duración total, sonido y pantalla completa.
+/// duración total, sonido, pantalla completa y animación de carga siempre centrada.
 class VisorVideo extends StatefulWidget {
   final File? archivoLocal;
   final String urlRemota;
@@ -73,9 +73,19 @@ class _VisorVideoState extends State<VisorVideo> {
           backgroundColor: Colors.grey.shade400,
           bufferedColor: const Color(0xFF63D0A1).withValues(alpha: 0.5),
         ),
-        placeholder: Container(
-          color: Colors.black,
-          child: const Center(child: CircularProgressIndicator(color: Color(0xFF52ABEB))),
+        // INDICADOR DE CÁRGA / BÚFER PERFECTAMENTE CENTRADO
+        bufferingBuilder: (context) {
+          return const Center(
+            child: CircularProgressIndicator(color: Color(0xFF52ABEB)),
+          );
+        },
+        placeholder: const SizedBox.expand(
+          child: DecoratedBox(
+            decoration: BoxDecoration(color: Colors.black),
+            child: Center(
+              child: CircularProgressIndicator(color: Color(0xFF52ABEB)),
+            ),
+          ),
         ),
         errorBuilder: (context, errorMessage) {
           return Center(
@@ -118,12 +128,14 @@ class _VisorVideoState extends State<VisorVideo> {
     if (_inicializando) {
       return Container(
         height: 250,
+        width: double.infinity,
         decoration: BoxDecoration(
           color: const Color(0xFF0F172A),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             const CircularProgressIndicator(color: Color(0xFF52ABEB)),
             const SizedBox(height: 16),
