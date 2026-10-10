@@ -107,7 +107,7 @@ class _VisorPptxState extends State<VisorPptx> {
       return Container(
         height: 300,
         alignment: Alignment.center,
-        color: const Color(0xFF0F172A),
+        color: const Color(0xFFFFF3ED),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -115,7 +115,7 @@ class _VisorPptxState extends State<VisorPptx> {
             const SizedBox(height: 16),
             Text(
               'Cargando presentación PowerPoint...',
-              style: GoogleFonts.inter(fontSize: 13, color: Colors.white70, fontWeight: FontWeight.w500),
+              style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF8C2C14), fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -153,11 +153,12 @@ class _VisorPptxState extends State<VisorPptx> {
 
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF0F172A),
+        color: const Color(0xFFFFF3ED), // Fondo naranja tenue de mesa de trabajo
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFFFCCBC), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
+            color: Colors.orange.shade900.withValues(alpha: 0.1),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -228,9 +229,10 @@ class _VisorPptxState extends State<VisorPptx> {
                                 decoration: BoxDecoration(
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: const Color(0xFFFFCCBC)),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.4),
+                                      color: Colors.orange.shade900.withValues(alpha: 0.15),
                                       blurRadius: 16,
                                       offset: const Offset(0, 6),
                                     ),
@@ -247,7 +249,7 @@ class _VisorPptxState extends State<VisorPptx> {
                                         color: const Color(0xFFC43E1C),
                                       ),
                                     ),
-                                    const Divider(color: Color(0xFFCBD5E1), height: 20),
+                                    const Divider(color: Color(0xFFFFCCBC), height: 20),
                                     Expanded(
                                       child: SingleChildScrollView(
                                         child: Column(
@@ -280,11 +282,11 @@ class _VisorPptxState extends State<VisorPptx> {
                         ),
                       ),
 
-                      // CARRUSEL DE MINIATURAS INFERIOR
+                      // CARRUSEL DE MINIATURAS INFERIOR EN NARANJA Y BLANCO
                       if (totalSlides > 1)
                         Container(
                           height: 60,
-                          color: const Color(0xFF1E293B),
+                          color: const Color(0xFFFFE0B2),
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                           child: ListView.builder(
                             scrollDirection: Axis.horizontal,
@@ -297,16 +299,19 @@ class _VisorPptxState extends State<VisorPptx> {
                                   width: 80,
                                   margin: const EdgeInsets.only(right: 8),
                                   decoration: BoxDecoration(
-                                    color: sel ? const Color(0xFFC43E1C) : Colors.white12,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: sel ? Colors.white : Colors.white24, width: sel ? 2 : 1),
+                                    color: sel ? const Color(0xFFC43E1C) : Colors.white,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: const Color(0xFFC43E1C),
+                                      width: sel ? 2 : 1,
+                                    ),
                                   ),
                                   alignment: Alignment.center,
                                   child: Text(
                                     '${idx + 1}',
                                     style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: sel ? FontWeight.bold : FontWeight.normal,
+                                      color: sel ? Colors.white : const Color(0xFFC43E1C),
+                                      fontWeight: FontWeight.bold,
                                       fontSize: 12,
                                     ),
                                   ),

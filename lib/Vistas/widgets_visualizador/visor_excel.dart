@@ -160,7 +160,7 @@ class _VisorExcelState extends State<VisorExcel> {
       return Container(
         height: 300,
         alignment: Alignment.center,
-        color: const Color(0xFF0F172A),
+        color: const Color(0xFFE8F5E9),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -168,7 +168,7 @@ class _VisorExcelState extends State<VisorExcel> {
             const SizedBox(height: 16),
             Text(
               'Cargando hoja de cálculo Excel...',
-              style: GoogleFonts.inter(fontSize: 13, color: Colors.white70, fontWeight: FontWeight.w500),
+              style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF1B5E20), fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -206,9 +206,10 @@ class _VisorExcelState extends State<VisorExcel> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFA5D6A7), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15),
+            color: Colors.green.shade900.withValues(alpha: 0.1),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -245,10 +246,10 @@ class _VisorExcelState extends State<VisorExcel> {
           if (_usarVisorWeb && _webViewController != null)
             Expanded(child: WebViewWidget(controller: _webViewController!))
           else ...[
-            // BARRA DE FÓRMULA FX EXCEL
+            // BARRA DE FÓRMULA FX EXCEL CON ESTILO VERDE Y BLANCO
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              color: const Color(0xFFF1F5F9),
+              color: const Color(0xFFE8F5E9),
               child: Row(
                 children: [
                   Container(
@@ -257,7 +258,7 @@ class _VisorExcelState extends State<VisorExcel> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.grey.shade300),
+                      border: Border.all(color: const Color(0xFFA5D6A7)),
                     ),
                     alignment: Alignment.center,
                     child: Text(
@@ -268,7 +269,7 @@ class _VisorExcelState extends State<VisorExcel> {
                   const SizedBox(width: 8),
                   Text(
                     'fx',
-                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF107C41), fontStyle: FontStyle.italic),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -277,7 +278,7 @@ class _VisorExcelState extends State<VisorExcel> {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.grey.shade300),
+                        border: Border.all(color: const Color(0xFFA5D6A7)),
                       ),
                       child: Text(
                         _celdaSeleccionadaValor,

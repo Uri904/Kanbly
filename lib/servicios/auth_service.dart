@@ -56,9 +56,27 @@ class AuthService {
       ) async {
     try {
       return await _auth.signInWithEmailAndPassword(
-        email: email,
+        email: email.trim(),
         password: password,
       );
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'user-not-found':
+        case 'invalid-credential':
+          throw Exception('Correo o contraseña incorrectos');
+        case 'wrong-password':
+          throw Exception('La contraseña es incorrecta');
+        case 'invalid-email':
+          throw Exception('El formato del correo no es válido');
+        case 'user-disabled':
+          throw Exception('Esta cuenta de usuario ha sido deshabilitada');
+        case 'too-many-requests':
+          throw Exception('Demasiados intentos fallidos. Intenta más tarde');
+        case 'network-request-failed':
+          throw Exception('Error de red. Verifica tu conexión a internet');
+        default:
+          throw Exception(e.message ?? 'Error al iniciar sesión (${e.code})');
+      }
     } catch (e) {
       throw Exception('Error al iniciar sesión: $e');
     }

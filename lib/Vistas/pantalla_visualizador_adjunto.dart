@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
 import '../modelo/tarea.dart';
 import 'widgets_visualizador/visor_pdf.dart';
 import 'widgets_visualizador/visor_video.dart';
@@ -90,7 +91,38 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
     }
 
     try {
-      final result = await OpenFilex.open(url);
+      String pathParaAbrir = url;
+
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Descargando archivo para abrir externamente...'),
+              duration: Duration(seconds: 2),
+              backgroundColor: Color(0xFF52ABEB),
+            ),
+          );
+        }
+
+        final tempDir = await getTemporaryDirectory();
+        final fileNameClean = adjunto.nombre.replaceAll(RegExp(r'[^\w.-]'), '_');
+        final localFile = File('${tempDir.path}/ext_$fileNameClean');
+
+        if (!localFile.existsSync()) {
+          final client = HttpClient();
+          final request = await client.getUrl(Uri.parse(url));
+          request.headers.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
+          final response = await request.close();
+          if (response.statusCode == 200) {
+            await response.pipe(localFile.openWrite());
+          } else {
+            throw Exception('Error servidor: ${response.statusCode}');
+          }
+        }
+        pathParaAbrir = localFile.path;
+      }
+
+      final result = await OpenFilex.open(pathParaAbrir);
       if (context.mounted) {
         if (result.type == ResultType.done) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -145,11 +177,28 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
     return Icons.article_rounded;
   }
 
+  Color _obtenerColorTemaPrincipal() {
+    if (_esDocx()) return const Color(0xFF2B579A); // Word Azul
+    if (_esExcel()) return const Color(0xFF107C41); // Excel Verde
+    if (_esPptx()) return const Color(0xFFC43E1C); // PowerPoint Naranja
+    if (_esPdf()) return const Color(0xFFD32F2F); // PDF Rojo
+    return const Color(0xFF52ABEB); // Azul Estándar
+  }
+
+  Color _obtenerColorFondoMesaTrabajo() {
+    if (_esDocx()) return const Color(0xFFF0F4F8); // Word Blanco/Azul
+    if (_esExcel()) return const Color(0xFFE8F5E9); // Excel Verde/Blanco
+    if (_esPptx()) return const Color(0xFFFFF3ED); // PowerPoint Naranja/Blanco
+    if (_esPdf()) return const Color(0xFFFFF5F5); // PDF Rojo/Blanco
+    if (_esImagen() || _esVideo() || _esTexto()) return const Color(0xFF0F172A);
+    return const Color(0xFFF8FAFC);
+  }
+
   @override
   Widget build(BuildContext context) {
-    const Color azulCielo = Color(0xFF52ABEB);
-    const Color verdeTurquesa = Color(0xFF63D0A1);
-    final esFondoOscuro = _esImagen() || _esTexto() || _esVideo() || _esDocx() || _esPdf() || _esPptx();
+    final colorTema = _obtenerColorTemaPrincipal();
+    final colorFondo = _obtenerColorFondoMesaTrabajo();
+    final esMediaOscura = _esImagen() || _esVideo() || _esTexto();
 
     File? archivoLocal;
     try {
@@ -160,12 +209,12 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
     } catch (_) {}
 
     return Scaffold(
-      backgroundColor: esFondoOscuro ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+      backgroundColor: colorFondo,
       appBar: AppBar(
-        backgroundColor: esFondoOscuro ? const Color(0xFF1E293B) : Colors.white,
+        backgroundColor: esMediaOscura ? const Color(0xFF1E293B) : colorTema,
         elevation: 1,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_rounded, color: esFondoOscuro ? Colors.white : const Color(0xFF1E293B)),
+          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
         title: Column(
@@ -178,14 +227,14 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
               style: GoogleFonts.inter(
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
-                color: esFondoOscuro ? Colors.white : const Color(0xFF1E293B),
+                color: Colors.white,
               ),
             ),
             Text(
               '${adjunto.tipo.toUpperCase()} • ${adjunto.tamanoLegible}',
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 11,
-                color: esFondoOscuro ? Colors.grey.shade400 : Colors.grey.shade600,
+                color: Colors.white70,
               ),
             ),
           ],
@@ -195,7 +244,7 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
             padding: const EdgeInsets.only(right: 12.0),
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: azulCielo,
+                backgroundColor: Colors.white.withValues(alpha: 0.2),
                 foregroundColor: Colors.white,
                 elevation: 0,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -220,7 +269,7 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
       bottomNavigationBar: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: esFondoOscuro ? const Color(0xFF1E293B) : Colors.white,
+          color: esMediaOscura ? const Color(0xFF1E293B) : Colors.white,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.05),
@@ -234,7 +283,7 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
             Expanded(
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: verdeTurquesa,
+                  backgroundColor: colorTema,
                   foregroundColor: Colors.white,
                   minimumSize: const Size(double.infinity, 48),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
