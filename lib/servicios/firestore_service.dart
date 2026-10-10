@@ -4,6 +4,7 @@ import '../modelo/usuario.dart';
 import '../modelo/tablero.dart';
 import '../modelo/tarea.dart';
 import '../modelo/invitacion.dart';
+import 'notificacion_vencimiento_service.dart';
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -195,19 +196,55 @@ class FirestoreService {
   // ========== TAREAS ==========
 
   Future<String> crearTarea(Tarea tarea) async {
+    print('PRUEBA: ENTRE AL METODO CREAR TAREA 1');
     try {
-      final docRef = await _firestore.collection('tareas').add(tarea.toMap());
+      print('PRUEBA: entrando a crearTarea');
+
+      final docRef = await _firestore
+          .collection('tareas')
+          .add(tarea.toMap());
+
+      print('PRUEBA: tarea guardada con ID ${docRef.id}');
+
+      final tareaConId = Tarea.fromMap(
+        docRef.id,
+        tarea.toMap(),
+      );
+
+      print('PRUEBA: llamando al servicio de notificaciones');
+
+      await NotificacionVencimientoService.programar(tareaConId);
+
+      print('PRUEBA: terminó la programación');
+
       return docRef.id;
-    } catch (e) {
-      throw Exception('Error al crear tarea: $e');
+    } catch (e, stackTrace) {
+      print('ERROR al crear o programar la tarea: $e');
+      print(stackTrace);
+      rethrow;
     }
   }
 
+
   Future<void> crearTareaConId(Tarea tarea) async {
     try {
-      await _firestore.collection('tareas').doc(tarea.id).set(tarea.toMap());
-    } catch (e) {
-      throw Exception('Error al crear tarea: $e');
+      print('PRUEBA: entrando a crearTareaConId');
+
+      await _firestore
+          .collection('tareas')
+          .doc(tarea.id)
+          .set(tarea.toMap());
+
+      print('PRUEBA: tarea guardada con ID ${tarea.id}');
+      print('PRUEBA: llamando al servicio de notificaciones');
+
+      await NotificacionVencimientoService.programar(tarea);
+
+      print('PRUEBA: terminó la programación');
+    } catch (e, stackTrace) {
+      print('ERROR al crear o programar la tarea: $e');
+      print(stackTrace);
+      rethrow;
     }
   }
 
@@ -263,18 +300,37 @@ class FirestoreService {
     try {
       final data = tarea.toMap();
       data['fechaActualizacion'] = Timestamp.now();
-      await _firestore.collection('tareas').doc(tarea.id).update(data);
+
+      await _firestore
+          .collection('tareas')
+          .doc(tarea.id)
+          .update(data);
+
+      // Reprogramar según la fecha, el título y el estado actuales.
+      await NotificacionVencimientoService.programar(tarea);
     } catch (e) {
       throw Exception('Error al actualizar tarea: $e');
     }
   }
 
-  Future<void> actualizarEstadoTarea(String tareaId, String nuevoEstado) async {
+  Future<void> actualizarEstadoTarea(
+      String tareaId,
+      String nuevoEstado,
+      ) async {
     try {
       await _firestore.collection('tareas').doc(tareaId).update({
         'estado': nuevoEstado,
         'fechaActualizacion': Timestamp.now(),
       });
+
+      // Obtener la tarea actualizada para programar o cancelar el aviso.
+      final tareaActualizada = await obtenerTarea(tareaId);
+
+      if (tareaActualizada != null) {
+        await NotificacionVencimientoService.programar(
+          tareaActualizada,
+        );
+      }
     } catch (e) {
       throw Exception('Error al actualizar estado de tarea: $e');
     }
@@ -303,6 +359,9 @@ class FirestoreService {
         'archivada': true,
         'fechaActualizacion': Timestamp.now(),
       });
+
+      // Cancelar la notificación local.
+      await NotificacionVencimientoService.cancelar(tareaId);
     } catch (e) {
       throw Exception('Error al eliminar tarea: $e');
     }

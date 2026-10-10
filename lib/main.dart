@@ -8,6 +8,7 @@ import 'firebase_options.dart';
 import 'servicios/firestore_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'servicios/notificacion_vencimiento_service.dart';
 
 
 Future<void> main() async {
@@ -34,6 +35,7 @@ Future<void> main() async {
   final firestoreService = FirestoreService();
   // await firestoreService.crearColeccionUsuarios();
 
+  await NotificacionVencimientoService.inicializar();
 
   runApp(const MyApp());
 }
