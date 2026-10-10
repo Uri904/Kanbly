@@ -111,6 +111,7 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
         if (!localFile.existsSync()) {
           final client = HttpClient();
           final request = await client.getUrl(Uri.parse(url));
+          request.headers.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
           final response = await request.close();
           if (response.statusCode == 200) {
             await response.pipe(localFile.openWrite());
