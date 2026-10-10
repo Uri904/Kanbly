@@ -32,7 +32,9 @@ class _FormularioTableroState extends State<FormularioTablero>
   Map<String, MiembroTableroInfo> _miembrosInfo = {};
   List<String> _columnas = ['Pendiente', 'En progreso', 'Completada'];
   String _fechaActualizacion = 'Sin actualizar';
-
+// Invitaciones preparadas, pendientes de guardar con el tablero.
+  final Map<String, Usuario> _invitacionesPendientes = {};
+  final Map<String, String> _rolesInvitacionesPendientes = {};
   // Módulos del tablero
   bool _tieneCalendario = true;
   bool _tieneNotas = true;
@@ -1625,8 +1627,31 @@ class _FormularioTableroState extends State<FormularioTablero>
         );
 
         if (widget.tablero == null) {
+          // 1. Crear el tablero primero.
           await _firestoreService.crearTableroConId(tablero);
+
+          // 2. Guardar las invitaciones pendientes.
+          for (final entry in _invitacionesPendientes.entries) {
+            final usuario = entry.value;
+            final rol = _rolesInvitacionesPendientes[entry.key];
+
+            if (rol == null) {
+              throw Exception(
+                'No se encontró el rol de ${usuario.nombreCompleto}',
+              );
+            }
+
+            await _firestoreService.crearInvitacion(
+              tableroId: tablero.id,
+              tableroNombre: tablero.nombre,
+              invitadoId: usuario.id,
+              invitadoEmail: usuario.email,
+              invitadoPor: tablero.creadorId,
+              rol: rol,
+            );
+          }
         } else {
+          // Si estamos editando, actualizar solamente el tablero.
           await _firestoreService.actualizarTablero(tablero);
         }
 
@@ -1730,36 +1755,77 @@ class _FormularioTableroState extends State<FormularioTablero>
                         borderRadius: BorderRadius.circular(10)),
                   ),
                   onPressed: () async {
-                    if (dialogFormKey.currentState!.validate()) {
-                      final email = emailController.text.trim();
-                      final usuario =
-                          await _firestoreService.obtenerUsuarioPorEmail(email);
+                    if (!dialogFormKey.currentState!.validate()) return;
 
+                    final email = emailController.text.trim().toLowerCase();
+
+                    try {
+                      final usuario =
+                      await _firestoreService.obtenerUsuarioPorEmail(email);
+
+                      if (!mounted || !context.mounted) return;
+
+                      // 1. Verificar que el usuario exista.
                       if (usuario == null) {
-                        if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                              content: Text(
-                                  'Usuario no encontrado en la base de datos')),
+                            content: Text('Usuario no encontrado en la base de datos'),
+                          ),
                         );
                         return;
                       }
 
-                      setState(() {
-                        if (!_miembrosSeleccionados
-                            .any((u) => u.id == usuario.id)) {
-                          _miembrosSeleccionados.add(usuario);
-                        }
-                        _miembrosInfo[usuario.id] = MiembroTableroInfo(
-                          usuarioId: usuario.id,
-                          rolKanban: rolSeleccionado,
-                          esAdmin: false,
-                          permisos: const PermisosMiembro(),
-                        );
-                      });
+                      // 2. Evitar invitarte a ti mismo.
+                      final uidActual = FirebaseAuth.instance.currentUser?.uid;
 
-                      if (!context.mounted) return;
-                      Navigator.pop(context);
+                      if (usuario.id == uidActual) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('No puedes invitarte a ti mismo'),
+                          ),
+                        );
+                        return;
+                      }
+
+                      // 3. Evitar invitar a alguien que ya es miembro.
+                      if (_miembrosSeleccionados.any((u) => u.id == usuario.id)) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Este usuario ya es miembro del tablero'),
+                          ),
+                        );
+                        return;
+                      }
+
+                      // 4. Evitar preparar la misma invitación dos veces.
+                      if (_invitacionesPendientes.containsKey(usuario.id)) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Ya preparaste una invitación para este usuario'),
+                          ),
+                        );
+                        return;
+                      }
+
+                      // 5. Guardar temporalmente al usuario y su rol.
+                      _invitacionesPendientes[usuario.id] = usuario;
+                      _rolesInvitacionesPendientes[usuario.id] = rolSeleccionado;
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Invitación preparada para ${usuario.nombreCompleto}',
+                          ),
+                        ),
+                      );
+
+                      Navigator.of(context).pop();
+                    } catch (e) {
+                      if (!mounted || !context.mounted) return;
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error al buscar usuario: $e')),
+                      );
                     }
                   },
                   child: const Text('Invitar',

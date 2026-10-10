@@ -491,30 +491,82 @@ class FirestoreService {
       }).toList();
     });
   }
+
   Future<void> aceptarInvitacion(Invitacion invitacion) async {
-    final usuarioActual = FirebaseAuth.instance.currentUser;
+    final usuarioActual = _auth.currentUser;
 
     if (usuarioActual == null) {
       throw Exception('Usuario no autenticado');
     }
 
-    await FirebaseFirestore.instance
-        .collection('tableros')
-        .doc(invitacion.tableroId)
-        .update({
-      'miembrosIds': FieldValue.arrayUnion([
-        usuarioActual.uid,
-      ]),
-    });
+    if (usuarioActual.uid != invitacion.invitadoId) {
+      throw Exception('Esta invitación no pertenece a tu usuario');
+    }
 
-    await FirebaseFirestore.instance
-        .collection('invitaciones')
-        .doc(invitacion.id)
-        .update({
-      'estado': 'aceptada',
-      'fechaRespuesta': FieldValue.serverTimestamp(),
-    });
+    try {
+      final invitacionRef =
+      _firestore.collection('invitaciones').doc(invitacion.id);
+
+      final tableroRef =
+      _firestore.collection('tableros').doc(invitacion.tableroId);
+
+      await _firestore.runTransaction((transaction) async {
+        // Leer ambos documentos antes de realizar cambios.
+        final invitacionDoc = await transaction.get(invitacionRef);
+        final tableroDoc = await transaction.get(tableroRef);
+
+        if (!invitacionDoc.exists) {
+          throw Exception('La invitación ya no existe');
+        }
+
+        if (!tableroDoc.exists) {
+          throw Exception('El tablero ya no existe');
+        }
+
+        final datosInvitacion = invitacionDoc.data()!;
+
+        if (datosInvitacion['invitadoId'] != usuarioActual.uid) {
+          throw Exception('La invitación no corresponde a este usuario');
+        }
+
+        if (datosInvitacion['estado'] != 'pendiente') {
+          throw Exception('Esta invitación ya fue respondida');
+        }
+
+        final datosTablero = tableroDoc.data()!;
+
+        // Recuperar los roles y permisos que ya existen.
+        final miembrosInfo = Map<String, dynamic>.from(
+          datosTablero['miembrosInfo'] ?? {},
+        );
+
+        // Guardar el rol elegido al enviar la invitación.
+        final miembro = MiembroTableroInfo(
+          usuarioId: usuarioActual.uid,
+          rolKanban: invitacion.rol,
+          esAdmin: false,
+          permisos: const PermisosMiembro(),
+        );
+
+        miembrosInfo[usuarioActual.uid] = miembro.toMap();
+
+        // Incorporar al usuario y guardar su información.
+        transaction.update(tableroRef, {
+          'miembrosIds': FieldValue.arrayUnion([usuarioActual.uid]),
+          'miembrosInfo': miembrosInfo,
+        });
+
+        // Marcar la invitación como aceptada.
+        transaction.update(invitacionRef, {
+          'estado': 'aceptada',
+          'fechaRespuesta': FieldValue.serverTimestamp(),
+        });
+      });
+    } catch (e) {
+      throw Exception('Error al aceptar invitación: $e');
+    }
   }
+
   Future<void> rechazarInvitacion(String invitacionId) async {
     await FirebaseFirestore.instance
         .collection('invitaciones')
