@@ -9,6 +9,7 @@ import '../modelo/tarea.dart';
 import '../modelo/tablero.dart';
 import '../modelo/usuario.dart';
 import '../servicios/firestore_service.dart';
+import '../servicios/storage_service.dart';
 import '../utilerias/formato_util.dart';
 import 'pantalla_visualizador_adjunto.dart';
 
@@ -454,7 +455,7 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
                       ),
                       child: Row(
                         children: [
-                          _obtenerIconoTipoAdjunto(adjunto.tipo),
+                          _obtenerIconoTipoAdjunto(adjunto.tipo, adjunto.nombre),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
@@ -561,9 +562,18 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
                   },
                 ),
                 ListTile(
+                  leading: const CircleAvatar(backgroundColor: Color(0xFFFFF3ED), child: Icon(Icons.slideshow_rounded, color: Color(0xFFC43E1C))),
+                  title: const Text('Presentación PowerPoint'),
+                  subtitle: const Text('PPT, PPTX'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _seleccionarArchivo(FileType.custom, 'documento', extensiones: ['pptx', 'ppt']);
+                  },
+                ),
+                ListTile(
                   leading: const CircleAvatar(backgroundColor: Color(0xFFF0FDF4), child: Icon(Icons.description_rounded, color: Color(0xFF63D0A1))),
                   title: const Text('Documento / PDF'),
-                  subtitle: const Text('PDF, DOC, DOCX, XLSX, PPTX, TXT'),
+                  subtitle: const Text('PDF, DOC, DOCX, XLSX, TXT'),
                   onTap: () {
                     Navigator.pop(context);
                     _seleccionarArchivo(FileType.custom, 'documento', extensiones: ['pdf', 'doc', 'docx', 'txt', 'xls', 'xlsx', 'csv', 'pptx', 'ppt']);
@@ -639,28 +649,53 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
     PantallaVisualizadorAdjunto.abrir(context, adjunto);
   }
 
-  Widget _obtenerIconoTipoAdjunto(String tipo) {
-    switch (tipo.toLowerCase()) {
-      case 'imagen':
-        return Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: const Color(0xFF52ABEB).withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
-          child: const Icon(Icons.image_rounded, color: Color(0xFF52ABEB), size: 20),
-        );
-      case 'video':
-        return Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: Colors.redAccent.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
-          child: const Icon(Icons.videocam_rounded, color: Colors.redAccent, size: 20),
-        );
-      case 'documento':
-      default:
-        return Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: const Color(0xFF63D0A1).withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
-          child: const Icon(Icons.description_rounded, color: Color(0xFF63D0A1), size: 20),
-        );
+  Widget _obtenerIconoTipoAdjunto(String tipo, [String? nombre]) {
+    final nameLower = (nombre ?? '').toLowerCase();
+    final tipoLower = tipo.toLowerCase();
+
+    if (nameLower.endsWith('.pptx') || nameLower.endsWith('.ppt')) {
+      return Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(color: const Color(0xFFC43E1C).withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+        child: const Icon(Icons.slideshow_rounded, color: Color(0xFFC43E1C), size: 20),
+      );
+    } else if (nameLower.endsWith('.xlsx') || nameLower.endsWith('.xls') || nameLower.endsWith('.csv')) {
+      return Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(color: const Color(0xFF107C41).withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+        child: const Icon(Icons.table_chart_rounded, color: Color(0xFF107C41), size: 20),
+      );
+    } else if (nameLower.endsWith('.docx') || nameLower.endsWith('.doc')) {
+      return Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(color: const Color(0xFF2B579A).withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+        child: const Icon(Icons.description_rounded, color: Color(0xFF2B579A), size: 20),
+      );
+    } else if (nameLower.endsWith('.pdf')) {
+      return Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(color: const Color(0xFFD32F2F).withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+        child: const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFFD32F2F), size: 20),
+      );
+    } else if (tipoLower == 'imagen' || ['.jpg', '.jpeg', '.png', '.webp', '.gif'].any((ext) => nameLower.endsWith(ext))) {
+      return Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(color: const Color(0xFF52ABEB).withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+        child: const Icon(Icons.image_rounded, color: Color(0xFF52ABEB), size: 20),
+      );
+    } else if (tipoLower == 'video' || ['.mp4', '.mov', '.avi', '.mkv'].any((ext) => nameLower.endsWith(ext))) {
+      return Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(color: Colors.redAccent.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+        child: const Icon(Icons.videocam_rounded, color: Colors.redAccent, size: 20),
+      );
     }
+
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(color: const Color(0xFF63D0A1).withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+      child: const Icon(Icons.description_rounded, color: Color(0xFF63D0A1), size: 20),
+    );
   }
 
   // --- WIDGET AUXILIAR DE BOTONES DE PRIORIDAD ---
@@ -745,6 +780,29 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
     setState(() => _procesando = true);
 
     try {
+      // Subir archivos adjuntos locales pendientes a Firebase Storage
+      List<AdjuntoTarea> adjuntosSubidos = [];
+      final storageService = StorageService();
+      for (final adj in _adjuntosActuales) {
+        if (adj.url.isNotEmpty && !adj.url.startsWith('http')) {
+          final urlRemota = await storageService.subirAdjuntoTarea(
+            filePath: adj.url,
+            nombreArchivo: adj.nombre,
+            tareaId: widget.tarea.id,
+          );
+          adjuntosSubidos.add(AdjuntoTarea(
+            id: adj.id,
+            nombre: adj.nombre,
+            url: urlRemota,
+            tipo: adj.tipo,
+            tamanoBytes: adj.tamanoBytes,
+            fechaAdjunto: adj.fechaAdjunto,
+          ));
+        } else {
+          adjuntosSubidos.add(adj);
+        }
+      }
+
       final enumEstado = EstadoTareaExtension.fromString(_columnaActual);
       final tareaActualizada = widget.tarea.copyWith(
         titulo: _tituloController.text.trim(),
@@ -754,7 +812,7 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
         prioridad: _prioridadActual,
         fechaVencimiento: _fechaVencimiento,
         asignadoA: _asignadoA,
-        adjuntos: _adjuntosActuales,
+        adjuntos: adjuntosSubidos,
       );
 
       await _firestoreService.actualizarTarea(tareaActualizada);

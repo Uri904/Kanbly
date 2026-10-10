@@ -156,5 +156,19 @@ void main() {
 
       expect(resultadoErr, contains('El archivo Word no está disponible o no existe localmente.'));
     });
+
+    test('Verificación de soporte de adjuntos PowerPoint y extensión PPTX/PPT', () {
+      final adjuntoPowerPoint = AdjuntoTarea(
+        id: '4',
+        nombre: 'PresentacionEstrategica.pptx',
+        url: '/ruta/local/PresentacionEstrategica.pptx',
+        tipo: 'documento',
+        tamanoBytes: 1572864,
+        fechaAdjunto: DateTime.now(),
+      );
+
+      expect(adjuntoPowerPoint.nombre.endsWith('.pptx'), isTrue);
+      expect(adjuntoPowerPoint.tamanoLegible, equals('1.5 MB'));
+    });
   });
 }

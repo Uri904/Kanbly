@@ -99,15 +99,15 @@ class _VisorPdfState extends State<VisorPdf> {
       return Container(
         height: 300,
         alignment: Alignment.center,
-        color: const Color(0xFF0F172A),
+        color: const Color(0xFFFFF5F5),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const CircularProgressIndicator(color: Color(0xFF52ABEB)),
+            const CircularProgressIndicator(color: Color(0xFFD32F2F)),
             const SizedBox(height: 16),
             Text(
               'Cargando documento PDF...',
-              style: GoogleFonts.inter(fontSize: 13, color: Colors.white70, fontWeight: FontWeight.w500),
+              style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF991B1B), fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -150,11 +150,12 @@ class _VisorPdfState extends State<VisorPdf> {
 
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF0F172A), // Fondo oscuro tenue de mesa de trabajo
+        color: const Color(0xFFFFF5F5), // Fondo rojo tenue de mesa de trabajo
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFFFCDD2), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
+            color: Colors.red.shade900.withValues(alpha: 0.1),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -163,13 +164,13 @@ class _VisorPdfState extends State<VisorPdf> {
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
-          // BARRA SUPERIOR DE CONTROL DE PAGINACIÓN PDF
+          // BARRA SUPERIOR DE CONTROL DE PAGINACIÓN PDF EN ROJO Y BLANCO
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            color: const Color(0xFF1E293B),
+            color: const Color(0xFFD32F2F),
             child: Row(
               children: [
-                const Icon(Icons.picture_as_pdf_rounded, color: Colors.redAccent, size: 22),
+                const Icon(Icons.picture_as_pdf_rounded, color: Colors.white, size: 22),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -183,9 +184,9 @@ class _VisorPdfState extends State<VisorPdf> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.white12,
+                      color: Colors.white24,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white24),
+                      border: Border.all(color: Colors.white38),
                     ),
                     child: Text(
                       'Pág. ${_paginaActual + 1} de $_totalPaginas',

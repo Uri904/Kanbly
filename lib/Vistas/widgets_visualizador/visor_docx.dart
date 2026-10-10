@@ -115,15 +115,15 @@ class _VisorDocxState extends State<VisorDocx> {
       return Container(
         height: 320,
         alignment: Alignment.center,
-        color: const Color(0xFF0F172A),
+        color: const Color(0xFFF0F4F8),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const CircularProgressIndicator(color: Color(0xFF2B579A)),
             const SizedBox(height: 16),
             Text(
-              'Cargando formato vectorial Word...',
-              style: GoogleFonts.inter(fontSize: 13, color: Colors.white70, fontWeight: FontWeight.w500),
+              'Cargando documento Word...',
+              style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF1E293B), fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -135,11 +135,12 @@ class _VisorDocxState extends State<VisorDocx> {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: const Color(0xFF0F172A), // Fondo oscuro de mesa de trabajo
+        color: const Color(0xFFF0F4F8), // Fondo blanco con azul tenue de mesa de trabajo
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFBFDBFE), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
+            color: Colors.blue.shade900.withValues(alpha: 0.1),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -148,13 +149,13 @@ class _VisorDocxState extends State<VisorDocx> {
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
-          // BARRA SUPERIOR WORD AZUL
+          // BARRA SUPERIOR WORD AZUL CON BLANCO
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            color: const Color(0xFF1B365D),
+            color: const Color(0xFF2B579A),
             child: Row(
               children: [
-                const Icon(Icons.description_rounded, color: Color(0xFF2B579A), size: 22),
+                const Icon(Icons.description_rounded, color: Colors.white, size: 22),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(

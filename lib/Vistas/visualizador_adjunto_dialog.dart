@@ -237,15 +237,25 @@ class VisualizadorAdjuntoDialog extends StatelessWidget {
     return Icons.article_rounded;
   }
 
+  Color _obtenerColorTema() {
+    if (_esDocx()) return const Color(0xFF2B579A); // Word Azul
+    if (_esExcel()) return const Color(0xFF107C41); // Excel Verde
+    if (_esPptx()) return const Color(0xFFC43E1C); // PowerPoint Naranja
+    if (_esPdf()) return const Color(0xFFD32F2F); // PDF Rojo
+    return const Color(0xFF52ABEB); // Default Azul
+  }
+
   @override
   Widget build(BuildContext context) {
+    final colorTema = _obtenerColorTema();
+
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
       contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
       title: Row(
         children: [
-          Icon(_obtenerIconoGeneral(adjunto.tipo), color: const Color(0xFF52ABEB)),
+          Icon(_obtenerIconoGeneral(adjunto.tipo), color: colorTema),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -278,8 +288,8 @@ class VisualizadorAdjuntoDialog extends StatelessWidget {
       ),
       actions: [
         TextButton.icon(
-          icon: const Icon(Icons.fullscreen_rounded, size: 18, color: Color(0xFF52ABEB)),
-          label: const Text('Pantalla completa', style: TextStyle(color: Color(0xFF52ABEB), fontWeight: FontWeight.bold)),
+          icon: Icon(Icons.fullscreen_rounded, size: 18, color: colorTema),
+          label: Text('Pantalla completa', style: TextStyle(color: colorTema, fontWeight: FontWeight.bold)),
           onPressed: () {
             Navigator.pop(context);
             PantallaVisualizadorAdjunto.abrir(context, adjunto);
