@@ -297,18 +297,19 @@ class _CapturaVozViewState extends State<CapturaVozView> {
 
                 // Estado de Carga ("Procesando con IA...")
                 if (controller.isLoading)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 20),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
                     child: Column(
                       children: [
-                        CircularProgressIndicator(color: verdeTurquesa),
-                        SizedBox(height: 12),
+                        const CircularProgressIndicator(color: verdeTurquesa),
+                        const SizedBox(height: 12),
                         Text(
-                          'Procesando dictado con IA Gemini...',
-                          style: TextStyle(
+                          controller.mensajeCarga,
+                          style: const TextStyle(
                             fontWeight: FontWeight.w600,
                             color: verdeTurquesa,
                           ),
+                          textAlign: TextAlign.center,
                         ),
                       ],
                     ),

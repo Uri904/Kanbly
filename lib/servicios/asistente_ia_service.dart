@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:firebase_ai/firebase_ai.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' show ClientException;
 import '../modelo/tarea_borrador.dart';
 
@@ -12,6 +13,7 @@ abstract class IAsistenteIaService {
     required DateTime fechaActual,
     required List<String> columnas,
     required List<Map<String, String>> miembros, // cada mapa contiene 'uid' y 'nombre'
+    void Function(int intento, int intentosMaximos)? onReintento,
   });
 }
 
@@ -120,7 +122,7 @@ enum _ClaseErrorIa {
 ///
 /// REINTENTOS AUTOMÁTICOS:
 /// Solo los errores temporales del servidor (500, 503, "high demand",
-/// "overloaded" o "unavailable") se reintentan hasta 3 veces con esperas
+/// "overloaded", "unavailable" o timeouts) se reintentan hasta 3 veces con esperas
 /// crecientes (2 s, 5 s y 10 s por defecto). Los demás errores (404 modelo no
 /// disponible, 403 API deshabilitada, JSON inválido, sin conexión, etc.) se
 /// informan de inmediato con un mensaje corto en español.
@@ -141,11 +143,17 @@ class AsistenteIaService implements IAsistenteIaService {
     Duration(seconds: 10),
   ];
 
+  /// Timeout por defecto por intento de generación: 25 segundos.
+  static const Duration timeoutPorIntentoPredeterminado = Duration(seconds: 25);
+
   final String nombreModelo;
 
   /// Esperas entre reintentos. Su longitud define cuántos reintentos se hacen
   /// (el intento inicial + uno por cada espera). Inyectable en pruebas.
   final List<Duration> esperasReintento;
+
+  /// Timeout asignado a cada intento de generateContent. Inyectable en pruebas.
+  final Duration timeoutPorIntento;
 
   final GenerarContenidoIa _generarContenido;
   final Future<void> Function(Duration duracion) _esperar;
@@ -153,6 +161,7 @@ class AsistenteIaService implements IAsistenteIaService {
   AsistenteIaService({
     this.nombreModelo = modeloIaPredeterminado,
     List<Duration> esperasReintento = esperasReintentoPredeterminadas,
+    this.timeoutPorIntento = timeoutPorIntentoPredeterminado,
     GenerarContenidoIa? generarContenido,
     Future<void> Function(Duration duracion)? esperar,
   })  : esperasReintento = List<Duration>.unmodifiable(esperasReintento),
@@ -168,87 +177,90 @@ class AsistenteIaService implements IAsistenteIaService {
     required DateTime fechaActual,
     required List<String> columnas,
     required List<Map<String, String>> miembros,
+    void Function(int intento, int intentosMaximos)? onReintento,
   }) async {
-    final textoLimpio = textoTranscrito.trim();
-    if (textoLimpio.isEmpty) {
-      return [];
-    }
+    final cronometroTotal = Stopwatch()..start();
+    try {
+      final textoLimpio = textoTranscrito.trim();
+      if (textoLimpio.isEmpty) {
+        return [];
+      }
 
-    final columnasLote = columnas.isNotEmpty
-        ? columnas
-        : const ['Pendiente', 'En progreso', 'Completada'];
+      final columnasLote = columnas.isNotEmpty
+          ? columnas
+          : const ['Pendiente', 'En progreso', 'Completada'];
 
-    final List<String> uidsMiembros = miembros
-        .map((m) => m['uid']?.trim() ?? '')
-        .where((uid) => uid.isNotEmpty)
-        .toList();
+      final List<String> uidsMiembros = miembros
+          .map((m) => m['uid']?.trim() ?? '')
+          .where((uid) => uid.isNotEmpty)
+          .toList();
 
-    // 1. Calcular offset de zona horaria de la fecha actual (ISO 8601 con offset)
-    final offset = fechaActual.timeZoneOffset;
-    final horas = offset.inHours.abs().toString().padLeft(2, '0');
-    final minutos = (offset.inMinutes.abs() % 60).toString().padLeft(2, '0');
-    final signo = offset.isNegative ? '-' : '+';
-    final isoOffsetStr =
-        '${fechaActual.toIso8601String().split('.').first}$signo$horas:$minutos';
+      // 1. Calcular offset de zona horaria de la fecha actual (ISO 8601 con offset)
+      final offset = fechaActual.timeZoneOffset;
+      final horas = offset.inHours.abs().toString().padLeft(2, '0');
+      final minutos = (offset.inMinutes.abs() % 60).toString().padLeft(2, '0');
+      final signo = offset.isNegative ? '-' : '+';
+      final isoOffsetStr =
+          '${fechaActual.toIso8601String().split('.').first}$signo$horas:$minutos';
 
-    // 2. Construir responseSchema dinámico con enums para columnas, prioridad y uids
-    final Schema schemaTareas = Schema.object(
-      properties: {
-        'tareas': Schema.array(
-          items: Schema.object(
-            properties: {
-              'titulo': Schema.string(
-                description: 'Título claro y conciso de la tarea dictada.',
-              ),
-              'descripcion': Schema.string(
-                description:
-                    'Descripción o detalle adicional mencionado para la tarea, o null si no hay.',
-                nullable: true,
-              ),
-              'prioridad': Schema.enumString(
-                enumValues: const ['alta', 'media', 'baja'],
-                description:
-                    'Prioridad indicada ("alta", "media", "baja") o null si no se especifica.',
-                nullable: true,
-              ),
-              'fechaLimite': Schema.string(
-                description:
-                    'Fecha y hora límite calculada en formato ISO 8601 con offset de zona horaria o null si no hay.',
-                nullable: true,
-              ),
-              'columna': Schema.enumString(
-                enumValues: columnasLote,
-                description:
-                    'Nombre exacto de una de las columnas del tablero recibidas.',
-                nullable: true,
-              ),
-              'asignadoUid': uidsMiembros.isNotEmpty
-                  ? Schema.enumString(
-                      enumValues: uidsMiembros,
-                      description:
-                          'UID del integrante al que se asigna la tarea o null si no se especifica.',
-                      nullable: true,
-                    )
-                  : Schema.string(
-                      description:
-                          'UID del integrante al que se asigna la tarea o null.',
-                      nullable: true,
-                    ),
-            },
-            optionalProperties: const [
-              'descripcion',
-              'prioridad',
-              'fechaLimite',
-              'columna',
-              'asignadoUid',
-            ],
+      // 2. Construir responseSchema dinámico con enums para columnas, prioridad y uids
+      final Schema schemaTareas = Schema.object(
+        properties: {
+          'tareas': Schema.array(
+            items: Schema.object(
+              properties: {
+                'titulo': Schema.string(
+                  description: 'Título claro y conciso de la tarea dictada.',
+                ),
+                'descripcion': Schema.string(
+                  description:
+                      'Descripción o detalle adicional mencionado para la tarea, o null si no hay.',
+                  nullable: true,
+                ),
+                'prioridad': Schema.enumString(
+                  enumValues: const ['alta', 'media', 'baja'],
+                  description:
+                      'Prioridad indicada ("alta", "media", "baja") o null si no se especifica.',
+                  nullable: true,
+                ),
+                'fechaLimite': Schema.string(
+                  description:
+                      'Fecha y hora límite calculada en formato ISO 8601 con offset de zona horaria o null si no hay.',
+                  nullable: true,
+                ),
+                'columna': Schema.enumString(
+                  enumValues: columnasLote,
+                  description:
+                      'Nombre exacto de una de las columnas del tablero recibidas.',
+                  nullable: true,
+                ),
+                'asignadoUid': uidsMiembros.isNotEmpty
+                    ? Schema.enumString(
+                        enumValues: uidsMiembros,
+                        description:
+                            'UID del integrante al que se asigna la tarea o null si no se especifica.',
+                        nullable: true,
+                      )
+                    : Schema.string(
+                        description:
+                            'UID del integrante al que se asigna la tarea o null.',
+                        nullable: true,
+                      ),
+              },
+              optionalProperties: const [
+                'descripcion',
+                'prioridad',
+                'fechaLimite',
+                'columna',
+                'asignadoUid',
+              ],
+            ),
           ),
-        ),
-      },
-    );
+        },
+      );
 
-    // 3. Prompt del sistema en español con restricciones estrictas
-    final String promptSistema = '''
+      // 3. Prompt del sistema en español con restricciones estrictas
+      final String promptSistema = '''
 Eres un asistente de IA experto en estructurar tareas para tableros Kanban.
 Tu objetivo es analizar la transcripción de dictado por voz del usuario y extraer las tareas mencionadas.
 
@@ -264,66 +276,76 @@ Reglas de extracción estrictas:
 4. "fechaLimite": Si el usuario indica un plazo o fecha (ej. "para mañana a las 3pm", "el viernes"), calcula la fecha/hora absoluta en formato ISO 8601 incluyendo el offset de zona horaria ($signo$horas:$minutos). Si no menciona fecha, asigna null.
 5. "columna": Selecciona la columna más adecuada dentro de las columnas permitidas. Si no especifica columna, asigna la primera columna de la lista ("${columnasLote.first}").
 6. "asignadoUid": Si el usuario menciona el nombre de un integrante de la lista, asigna su UID exacto. Si no coincide con ningún integrante o no se especifica, asigna null.
-7. REGLA FUNDAMENTAL DE FIDELIDAD: NO dividas una sola tarea en múltiples tareas. Tampoco inventes tareas que no hayan sido mencionadas explícitamente en el dictado. Si algo no está claro, asigna null al campo correspondiente.
+7. REGLA FUNDAMENTAL DE FIDELIDAD: NO dividas una sola tarea en múltiples tareas. Tampoco inventes tareas que no hayan sido mencionadas expliticitamente en el dictado. Si algo no está claro, asigna null al campo correspondiente.
 ''';
 
-    // 4. Armar la solicitud y llamar a Gemini con reintentos automáticos
-    final solicitud = SolicitudIa(
-      nombreModelo: nombreModelo,
-      prompt: 'Texto dictado por el usuario: "$textoLimpio"',
-      instruccionSistema: promptSistema,
-      configuracionGeneracion: GenerationConfig(
-        responseMimeType: 'application/json',
-        responseSchema: schemaTareas,
-      ),
-    );
+      // 4. Armar la solicitud y llamar a Gemini con reintentos automáticos
+      final solicitud = SolicitudIa(
+        nombreModelo: nombreModelo,
+        prompt: 'Texto dictado por el usuario: "$textoLimpio"',
+        instruccionSistema: promptSistema,
+        configuracionGeneracion: GenerationConfig(
+          responseMimeType: 'application/json',
+          responseSchema: schemaTareas,
+          thinkingConfig: ThinkingConfig.withThinkingLevel(ThinkingLevel.low),
+        ),
+      );
 
-    final String? responseText = await _generarContenidoConReintentos(solicitud);
+      final String? responseText = await _generarContenidoConReintentos(
+        solicitud,
+        onReintento: onReintento,
+      );
 
-    if (responseText == null || responseText.trim().isEmpty) {
-      throw AsistenteIaException(MensajesAsistenteIa.respuestaInvalida);
-    }
-
-    // 5. Parsear respuesta JSON devuelta por Gemini
-    try {
-      final dynamic parsedJson = jsonDecode(responseText);
-      List<dynamic> listaTareasJson = [];
-
-      if (parsedJson is Map<String, dynamic>) {
-        if (parsedJson.containsKey('tareas') && parsedJson['tareas'] is List) {
-          listaTareasJson = parsedJson['tareas'] as List<dynamic>;
-        }
-      } else if (parsedJson is List) {
-        listaTareasJson = parsedJson;
+      if (responseText == null || responseText.trim().isEmpty) {
+        throw AsistenteIaException(MensajesAsistenteIa.respuestaInvalida);
       }
 
-      final List<TareaBorrador> borradores = [];
-      int contadorId = 1;
+      // 5. Parsear respuesta JSON devuelta por Gemini
+      try {
+        final dynamic parsedJson = jsonDecode(responseText);
+        List<dynamic> listaTareasJson = [];
 
-      for (final item in listaTareasJson) {
-        if (item is Map<String, dynamic>) {
-          final idLocal =
-              'borrador_${DateTime.now().millisecondsSinceEpoch}_$contadorId';
-          contadorId++;
-
-          final borrador = TareaBorrador.fromMap(
-            item,
-            columnasDisponibles: columnasLote,
-            miembrosUids: uidsMiembros,
-            idLocal: idLocal,
-          );
-          borradores.add(borrador);
+        if (parsedJson is Map<String, dynamic>) {
+          if (parsedJson.containsKey('tareas') && parsedJson['tareas'] is List) {
+            listaTareasJson = parsedJson['tareas'] as List<dynamic>;
+          }
+        } else if (parsedJson is List) {
+          listaTareasJson = parsedJson;
         }
-      }
 
-      return borradores;
-    } on FormatException catch (error) {
-      // JSON inválido: no se reintenta, se informa de inmediato.
-      throw AsistenteIaException(MensajesAsistenteIa.respuestaInvalida,
-          causa: error);
-    } catch (error) {
-      throw AsistenteIaException(MensajesAsistenteIa.errorInesperado,
-          causa: error);
+        final List<TareaBorrador> borradores = [];
+        int contadorId = 1;
+
+        for (final item in listaTareasJson) {
+          if (item is Map<String, dynamic>) {
+            final idLocal =
+                'borrador_${DateTime.now().millisecondsSinceEpoch}_$contadorId';
+            contadorId++;
+
+            final borrador = TareaBorrador.fromMap(
+              item,
+              columnasDisponibles: columnasLote,
+              miembrosUids: uidsMiembros,
+              idLocal: idLocal,
+            );
+            borradores.add(borrador);
+          }
+        }
+
+        return borradores;
+      } on FormatException catch (error) {
+        // JSON inválido: no se reintenta, se informa de inmediato.
+        throw AsistenteIaException(MensajesAsistenteIa.respuestaInvalida,
+            causa: error);
+      } catch (error) {
+        throw AsistenteIaException(MensajesAsistenteIa.errorInesperado,
+            causa: error);
+      }
+    } finally {
+      cronometroTotal.stop();
+      debugPrint(
+        '[AsistenteIaService] procesarDictadoVoz completado en ${cronometroTotal.elapsedMilliseconds} ms',
+      );
     }
   }
 
@@ -332,17 +354,33 @@ Reglas de extracción estrictas:
   /// Se hace 1 intento inicial y hasta [esperasReintento].length reintentos,
   /// esperando `esperasReintento[i]` antes del reintento `i + 1`.
   /// Si se agotan los reintentos, lanza un mensaje genérico de servicio ocupado.
-  Future<String?> _generarContenidoConReintentos(SolicitudIa solicitud) async {
+  Future<String?> _generarContenidoConReintentos(
+    SolicitudIa solicitud, {
+    void Function(int intento, int intentosMaximos)? onReintento,
+  }) async {
     Object? ultimaCausa;
 
     for (var intento = 1; intento <= intentosMaximos; intento++) {
+      final cronometroIntento = Stopwatch()..start();
       try {
-        return await _generarContenido(solicitud);
+        final respuesta = await _generarContenido(solicitud)
+            .timeout(timeoutPorIntento);
+        cronometroIntento.stop();
+        debugPrint(
+          '[AsistenteIaService] Intento $intento/$intentosMaximos exitoso en ${cronometroIntento.elapsedMilliseconds} ms',
+        );
+        return respuesta;
       } on AsistenteIaException {
-        // Errores ya traducidos por un generador inyectado: no se reenvuelven.
+        cronometroIntento.stop();
         rethrow;
       } catch (error) {
+        cronometroIntento.stop();
         final clase = _clasificarError(error);
+        debugPrint(
+          '[AsistenteIaService] Intento $intento/$intentosMaximos falló en ${cronometroIntento.elapsedMilliseconds} ms. '
+          'Clase: $clase. Error: $error',
+        );
+
         final esUltimoIntento = intento == intentosMaximos;
 
         if (clase != _ClaseErrorIa.temporal || esUltimoIntento) {
@@ -350,6 +388,7 @@ Reglas de extracción estrictas:
         }
 
         ultimaCausa = error;
+        onReintento?.call(intento + 1, intentosMaximos);
         await _esperar(esperasReintento[intento - 1]);
       }
     }

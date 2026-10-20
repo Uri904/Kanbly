@@ -28,6 +28,7 @@ class AsistenteIaController extends ChangeNotifier {
   String? _errorMessage;
 
   List<TareaBorrador> _borradores = [];
+  String _mensajeCarga = 'Procesando dictado con IA Gemini...';
 
   AsistenteIaController({
     IAsistenteIaService? iaService,
@@ -43,6 +44,7 @@ class AsistenteIaController extends ChangeNotifier {
   bool get permissionPermanentlyDenied => _permissionPermanentlyDenied;
   String get transcription => _transcription;
   bool get isLoading => _isLoading;
+  String get mensajeCarga => _mensajeCarga;
   String? get errorMessage => _errorMessage;
   List<TareaBorrador> get borradores => List.unmodifiable(_borradores);
 
@@ -173,6 +175,7 @@ class AsistenteIaController extends ChangeNotifier {
     }
 
     _isLoading = true;
+    _mensajeCarga = 'Procesando dictado con IA Gemini...';
     _errorMessage = null;
     notifyListeners();
 
@@ -182,6 +185,11 @@ class AsistenteIaController extends ChangeNotifier {
         fechaActual: fechaActual,
         columnas: columnas,
         miembros: miembros,
+        onReintento: (intento, intentosMaximos) {
+          _mensajeCarga =
+              'El servicio está ocupado, reintentando ($intento/$intentosMaximos)...';
+          notifyListeners();
+        },
       );
 
       _borradores = resultados;
@@ -277,6 +285,7 @@ class AsistenteIaController extends ChangeNotifier {
     _errorMessage = null;
     _isLoading = false;
     _isListening = false;
+    _mensajeCarga = 'Procesando dictado con IA Gemini...';
     _borradores.clear();
     notifyListeners();
   }

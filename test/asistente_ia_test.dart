@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:firebase_ai/firebase_ai.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -22,11 +23,41 @@ class FakeAsistenteIaService implements IAsistenteIaService {
     required DateTime fechaActual,
     required List<String> columnas,
     required List<Map<String, String>> miembros,
+    void Function(int intento, int intentosMaximos)? onReintento,
   }) async {
     if (throwError) {
       throw Exception('Error simulado en servicio Fake de IA');
     }
     return borradoresAProcesar;
+  }
+}
+
+/// Fake de IAsistenteIaService que simula reintentos para probar el controlador.
+class FakeAsistenteIaConReintentoSimulado implements IAsistenteIaService {
+  final _completer = Completer<List<TareaBorrador>>();
+
+  void completar() {
+    if (!_completer.isCompleted) {
+      _completer.complete([
+        const TareaBorrador(
+          id: 'borrador_1',
+          titulo: 'Tarea recuperada',
+          columna: 'Pendiente',
+        ),
+      ]);
+    }
+  }
+
+  @override
+  Future<List<TareaBorrador>> procesarDictadoVoz({
+    required String textoTranscrito,
+    required DateTime fechaActual,
+    required List<String> columnas,
+    required List<Map<String, String>> miembros,
+    void Function(int intento, int intentosMaximos)? onReintento,
+  }) async {
+    onReintento?.call(2, 4);
+    return _completer.future;
   }
 }
 
@@ -267,16 +298,44 @@ void main() {
       expect(controller.errorMessage, contains('Error simulado en servicio Fake de IA'));
       expect(controller.isLoading, isFalse);
     });
+
+    test('Actualiza mensajeCarga durante reintentos del servicio', () async {
+      final fakeService = FakeAsistenteIaConReintentoSimulado();
+      final controller = AsistenteIaController(iaService: fakeService);
+
+      controller.setTranscription('Dictado para probar reintento');
+
+      final futuro = controller.procesarTranscripcionConIa(
+        fechaActual: DateTime.now(),
+        columnas: ['Pendiente'],
+        miembros: [],
+      );
+
+      expect(
+        controller.mensajeCarga,
+        equals('El servicio está ocupado, reintentando (2/4)...'),
+      );
+
+      fakeService.completar();
+      final ok = await futuro;
+
+      expect(ok, isTrue);
+      expect(controller.borradores.length, equals(1));
+    });
   });
 
-  group('Reintentos automáticos de AsistenteIaService', () {
+  group('Reintentos automáticos, timeouts y callbacks de AsistenteIaService', () {
     /// Ejecuta el dictado con datos fijos para simplificar cada prueba.
-    Future<List<TareaBorrador>> procesar(AsistenteIaService servicio) =>
+    Future<List<TareaBorrador>> procesar(
+      AsistenteIaService servicio, {
+      void Function(int, int)? onReintento,
+    }) =>
         servicio.procesarDictadoVoz(
           textoTranscrito: 'Enviar el reporte mañana',
           fechaActual: DateTime(2026, 10, 17, 9, 30),
           columnas: const ['Pendiente', 'Completada'],
           miembros: const [],
+          onReintento: onReintento,
         );
 
     /// Ejecuta la acción y devuelve el error capturado (o null si no hubo error).
@@ -316,7 +375,7 @@ void main() {
       );
     });
 
-    test('Reintenta con esperas crecientes (2 s y 5 s) y responde al tercer intento',
+    test('Reintenta con esperas crecientes (2 s y 5 s) e invoca onReintento',
         () async {
       final generador = GeneradorIaFalso(<Object?>[
         FirebaseAIException(
@@ -326,6 +385,8 @@ void main() {
         '{"tareas":[{"titulo":"Enviar reporte","prioridad":"alta","columna":"Pendiente"}]}',
       ]);
       final esperas = <Duration>[];
+      final reintentosNotificados = <String>[];
+
       final servicio = AsistenteIaService(
         generarContenido: generador.call,
         esperar: (duracion) async {
@@ -333,13 +394,19 @@ void main() {
         },
       );
 
-      final borradores = await procesar(servicio);
+      final borradores = await procesar(
+        servicio,
+        onReintento: (intento, max) {
+          reintentosNotificados.add('$intento/$max');
+        },
+      );
 
       expect(generador.llamadas, equals(3)); // falla 2 veces y acierta a la tercera
       expect(
         esperas,
         equals(const [Duration(seconds: 2), Duration(seconds: 5)]),
       );
+      expect(reintentosNotificados, equals(const ['2/4', '3/4']));
       expect(borradores, hasLength(1));
       expect(borradores.single.titulo, equals('Enviar reporte'));
       expect(borradores.single.prioridad, equals(3)); // alta
@@ -380,6 +447,42 @@ void main() {
           Duration(seconds: 10),
         ]),
       );
+    });
+
+    test('Un timeout por intento (Future.timeout) se reintenta igual que un error 500',
+        () async {
+      final esperas = <Duration>[];
+      final reintentosNotificados = <String>[];
+
+      final servicio = AsistenteIaService(
+        esperasReintento: const [Duration.zero],
+        timeoutPorIntento: const Duration(milliseconds: 20),
+        generarContenido: (solicitud) async {
+          // Simular llamada lenta que excede el timeout por intento
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+          return '{"tareas":[{"titulo":"Tarea tardía","columna":"Pendiente"}]}';
+        },
+        esperar: (duracion) async {
+          esperas.add(duracion);
+        },
+      );
+
+      final error = await capturarError(
+        () => procesar(
+          servicio,
+          onReintento: (intento, max) {
+            reintentosNotificados.add('$intento/$max');
+          },
+        ),
+      );
+
+      expect(error, isA<AsistenteIaException>());
+      expect(
+        (error! as AsistenteIaException).mensaje,
+        equals(MensajesAsistenteIa.servicioOcupado),
+      );
+      expect(esperas, equals(const [Duration.zero]));
+      expect(reintentosNotificados, equals(const ['2/2']));
     });
 
     test('Un error 404 de modelo no disponible no se reintenta', () async {
