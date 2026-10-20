@@ -120,12 +120,12 @@ enum _ClaseErrorIa {
 
 /// Servicio que interactúa con Gemini a través de Firebase AI Logic (`FirebaseAI.googleAI()`).
 ///
-/// REINTENTOS AUTOMÁTICOS:
-/// Solo los errores temporales del servidor (500, 503, "high demand",
-/// "overloaded", "unavailable" o timeouts) se reintentan hasta 3 veces con esperas
-/// crecientes (2 s, 5 s y 10 s por defecto). Los demás errores (404 modelo no
-/// disponible, 403 API deshabilitada, JSON inválido, sin conexión, etc.) se
-/// informan de inmediato con un mensaje corto en español.
+/// REINTENTOS AUTOMÁTICOS Y CONMUTACIÓN MULTIMODELO:
+/// Prueba ordenadamente los modelos configurados (por defecto 'gemini-3.5-flash-lite'
+/// y 'gemini-3.5-flash'). Para cada modelo se realizan hasta 2 intentos (12 s de
+/// timeout por intento y 1 s de espera entre intentos si falla por error temporal).
+/// Si un modelo agota sus intentos con error temporal, se conmuta al siguiente modelo.
+/// Existe un tope total de procesamiento de 30 segundos acumulados.
 ///
 /// NOTA DE CONFIGURACIÓN EN CONSOLA DE FIREBASE:
 /// Para que `FirebaseAI.googleAI()` funcione correctamente sin API keys expuestas en el código:
@@ -133,43 +133,55 @@ enum _ClaseErrorIa {
 /// 2. Selecciona tu proyecto y accede a la sección "Build" -> "AI Logic" (o "Vertex AI / Google AI in Firebase").
 /// 3. Habilita la integración de Gemini Developer API.
 class AsistenteIaService implements IAsistenteIaService {
-  /// Constante de modelo Flash vigente según la documentación de Firebase AI Logic.
-  static const String modeloIaPredeterminado = 'gemini-3.8-flash';
-
-  /// Esperas por defecto antes de cada reintento: 3 reintentos (2 s, 5 s y 10 s).
-  static const List<Duration> esperasReintentoPredeterminadas = <Duration>[
-    Duration(seconds: 2),
-    Duration(seconds: 5),
-    Duration(seconds: 10),
+  /// Lista predeterminada de modelos ordenados por velocidad y preferencia.
+  static const List<String> modelosPredeterminados = <String>[
+    'gemini-3.5-flash-lite',
+    'gemini-3.5-flash',
   ];
 
-  /// Timeout por defecto por intento de generación: 25 segundos.
-  static const Duration timeoutPorIntentoPredeterminado = Duration(seconds: 25);
+  /// Esperas por defecto antes de cada reintento dentro del mismo modelo: 1 s.
+  static const List<Duration> esperasReintentoPredeterminadas = <Duration>[
+    Duration(seconds: 1),
+  ];
 
-  final String nombreModelo;
+  /// Timeout por defecto por intento de generación: 12 segundos.
+  static const Duration timeoutPorIntentoPredeterminado = Duration(seconds: 12);
 
-  /// Esperas entre reintentos. Su longitud define cuántos reintentos se hacen
-  /// (el intento inicial + uno por cada espera). Inyectable en pruebas.
+  /// Tope total de procesamiento para todo procesarDictadoVoz: 30 segundos.
+  static const Duration topeTotalProcesamientoPredeterminado =
+      Duration(seconds: 30);
+
+  final List<String> modelos;
+
+  /// Esperas entre reintentos por modelo.
   final List<Duration> esperasReintento;
 
-  /// Timeout asignado a cada intento de generateContent. Inyectable en pruebas.
+  /// Timeout asignado a cada intento de generateContent.
   final Duration timeoutPorIntento;
+
+  /// Tope máximo acumulado de tiempo para todo procesarDictadoVoz.
+  final Duration topeTotalProcesamiento;
 
   final GenerarContenidoIa _generarContenido;
   final Future<void> Function(Duration duracion) _esperar;
 
   AsistenteIaService({
-    this.nombreModelo = modeloIaPredeterminado,
+    List<String> modelos = modelosPredeterminados,
     List<Duration> esperasReintento = esperasReintentoPredeterminadas,
     this.timeoutPorIntento = timeoutPorIntentoPredeterminado,
+    this.topeTotalProcesamiento = topeTotalProcesamientoPredeterminado,
     GenerarContenidoIa? generarContenido,
     Future<void> Function(Duration duracion)? esperar,
-  })  : esperasReintento = List<Duration>.unmodifiable(esperasReintento),
+  })  : modelos = List<String>.unmodifiable(modelos),
+        esperasReintento = List<Duration>.unmodifiable(esperasReintento),
         _generarContenido = generarContenido ?? _generarConFirebaseAi,
         _esperar = esperar ?? Future<void>.delayed;
 
-  /// Número total de intentos permitidos: el inicial más los reintentos configurados.
-  int get intentosMaximos => esperasReintento.length + 1;
+  /// Número de intentos por cada modelo (intento inicial + reintentos configurados).
+  int get intentosMaximosPorModelo => esperasReintento.length + 1;
+
+  /// Número total máximo de intentos sumando todos los modelos.
+  int get intentosMaximosTotales => modelos.length * intentosMaximosPorModelo;
 
   @override
   Future<List<TareaBorrador>> procesarDictadoVoz({
@@ -276,23 +288,15 @@ Reglas de extracción estrictas:
 4. "fechaLimite": Si el usuario indica un plazo o fecha (ej. "para mañana a las 3pm", "el viernes"), calcula la fecha/hora absoluta en formato ISO 8601 incluyendo el offset de zona horaria ($signo$horas:$minutos). Si no menciona fecha, asigna null.
 5. "columna": Selecciona la columna más adecuada dentro de las columnas permitidas. Si no especifica columna, asigna la primera columna de la lista ("${columnasLote.first}").
 6. "asignadoUid": Si el usuario menciona el nombre de un integrante de la lista, asigna su UID exacto. Si no coincide con ningún integrante o no se especifica, asigna null.
-7. REGLA FUNDAMENTAL DE FIDELIDAD: NO dividas una sola tarea en múltiples tareas. Tampoco inventes tareas que no hayan sido mencionadas expliticitamente en el dictado. Si algo no está claro, asigna null al campo correspondiente.
+7. REGLA FUNDAMENTAL DE FIDELIDAD: NO dividas una sola tarea en múltiples tareas. Tampoco inventes tareas que no hayan sido mencionadas explícitamente en el dictado. Si algo no está claro, asigna null al campo correspondiente.
 ''';
 
-      // 4. Armar la solicitud y llamar a Gemini con reintentos automáticos
-      final solicitud = SolicitudIa(
-        nombreModelo: nombreModelo,
-        prompt: 'Texto dictado por el usuario: "$textoLimpio"',
-        instruccionSistema: promptSistema,
-        configuracionGeneracion: GenerationConfig(
-          responseMimeType: 'application/json',
-          responseSchema: schemaTareas,
-          thinkingConfig: ThinkingConfig.withThinkingLevel(ThinkingLevel.low),
-        ),
-      );
-
-      final String? responseText = await _generarContenidoConReintentos(
-        solicitud,
+      // 4. Ejecutar con la lista ordenada de modelos
+      final String? responseText = await _generarContenidoConModelosYReintentos(
+        promptUsuario: 'Texto dictado por el usuario: "$textoLimpio"',
+        promptSistema: promptSistema,
+        schemaTareas: schemaTareas,
+        cronometroTotal: cronometroTotal,
         onReintento: onReintento,
       );
 
@@ -349,52 +353,130 @@ Reglas de extracción estrictas:
     }
   }
 
-  /// Llama a `generateContent` reintentando solo errores temporales.
-  ///
-  /// Se hace 1 intento inicial y hasta [esperasReintento].length reintentos,
-  /// esperando `esperasReintento[i]` antes del reintento `i + 1`.
-  /// Si se agotan los reintentos, lanza un mensaje genérico de servicio ocupado.
-  Future<String?> _generarContenidoConReintentos(
-    SolicitudIa solicitud, {
+  /// Llama a `generateContent` iterando sobre [modelos] y realizando hasta
+  /// [intentosMaximosPorModelo] por modelo. Respetando el tope global de 30 s.
+  Future<String?> _generarContenidoConModelosYReintentos({
+    required String promptUsuario,
+    required String promptSistema,
+    required Schema schemaTareas,
+    required Stopwatch cronometroTotal,
     void Function(int intento, int intentosMaximos)? onReintento,
   }) async {
     Object? ultimaCausa;
+    final Set<String> modelosSinThinking = <String>{};
+    int intentoGlobal = 0;
 
-    for (var intento = 1; intento <= intentosMaximos; intento++) {
-      final cronometroIntento = Stopwatch()..start();
-      try {
-        final respuesta = await _generarContenido(solicitud)
-            .timeout(timeoutPorIntento);
-        cronometroIntento.stop();
-        debugPrint(
-          '[AsistenteIaService] Intento $intento/$intentosMaximos exitoso en ${cronometroIntento.elapsedMilliseconds} ms',
-        );
-        return respuesta;
-      } on AsistenteIaException {
-        cronometroIntento.stop();
-        rethrow;
-      } catch (error) {
-        cronometroIntento.stop();
-        final clase = _clasificarError(error);
-        debugPrint(
-          '[AsistenteIaService] Intento $intento/$intentosMaximos falló en ${cronometroIntento.elapsedMilliseconds} ms. '
-          'Clase: $clase. Error: $error',
-        );
+    for (var iModelo = 0; iModelo < modelos.length; iModelo++) {
+      final nombreModelo = modelos[iModelo];
+      final esUltimoModelo = iModelo == modelos.length - 1;
 
-        final esUltimoIntento = intento == intentosMaximos;
+      for (var intentoModelo = 1;
+          intentoModelo <= intentosMaximosPorModelo;
+          intentoModelo++) {
+        intentoGlobal++;
 
-        if (clase != _ClaseErrorIa.temporal || esUltimoIntento) {
-          throw AsistenteIaException(_mensajeParaClase(clase), causa: error);
+        // 1. Verificar si se superó el tope total de tiempo
+        if (cronometroTotal.elapsed >= topeTotalProcesamiento) {
+          debugPrint(
+            '[AsistenteIaService] Se superó el tope total de procesamiento de ${topeTotalProcesamiento.inSeconds} s',
+          );
+          throw AsistenteIaException(MensajesAsistenteIa.servicioOcupado,
+              causa: ultimaCausa);
         }
 
-        ultimaCausa = error;
-        onReintento?.call(intento + 1, intentosMaximos);
-        await _esperar(esperasReintento[intento - 1]);
+        final tiempoRestante = topeTotalProcesamiento - cronometroTotal.elapsed;
+        if (tiempoRestante <= Duration.zero) {
+          throw AsistenteIaException(MensajesAsistenteIa.servicioOcupado,
+              causa: ultimaCausa);
+        }
+
+        final timeoutAplicable = tiempoRestante < timeoutPorIntento
+            ? tiempoRestante
+            : timeoutPorIntento;
+
+        final usarThinking = !modelosSinThinking.contains(nombreModelo);
+        final solicitud = SolicitudIa(
+          nombreModelo: nombreModelo,
+          prompt: promptUsuario,
+          instruccionSistema: promptSistema,
+          configuracionGeneracion: GenerationConfig(
+            responseMimeType: 'application/json',
+            responseSchema: schemaTareas,
+            thinkingConfig: usarThinking
+                ? ThinkingConfig.withThinkingLevel(ThinkingLevel.low)
+                : null,
+          ),
+        );
+
+        final cronometroIntento = Stopwatch()..start();
+        try {
+          final respuesta = await _generarContenido(solicitud)
+              .timeout(timeoutAplicable);
+          cronometroIntento.stop();
+          debugPrint(
+            '[AsistenteIaService] Modelo $nombreModelo - Intento $intentoModelo/$intentosMaximosPorModelo (Global $intentoGlobal/$intentosMaximosTotales) exitoso en ${cronometroIntento.elapsedMilliseconds} ms',
+          );
+          return respuesta;
+        } on AsistenteIaException {
+          cronometroIntento.stop();
+          rethrow;
+        } catch (error) {
+          cronometroIntento.stop();
+          final clase = _clasificarError(error);
+          debugPrint(
+            '[AsistenteIaService] Modelo $nombreModelo - Intento $intentoModelo/$intentosMaximosPorModelo (Global $intentoGlobal/$intentosMaximosTotales) falló en ${cronometroIntento.elapsedMilliseconds} ms. Clase: $clase. Error: $error',
+          );
+
+          // Si el modelo rechazó ThinkingConfig, lo registramos y reintentamos ese intento sin thinking
+          final textoError = error.toString().toLowerCase();
+          if (usarThinking && _esErrorThinkingConfig(textoError)) {
+            debugPrint(
+              '[AsistenteIaService] Modelo $nombreModelo rechazó ThinkingConfig. Reintentando sin thinking...',
+            );
+            modelosSinThinking.add(nombreModelo);
+            intentoModelo--;
+            intentoGlobal--;
+            continue;
+          }
+
+          final esUltimoIntentoDelModelo =
+              intentoModelo == intentosMaximosPorModelo;
+          final esUltimoIntentoGlobal =
+              intentoGlobal == intentosMaximosTotales;
+
+          if (clase != _ClaseErrorIa.temporal ||
+              (esUltimoModelo && esUltimoIntentoDelModelo)) {
+            throw AsistenteIaException(_mensajeParaClase(clase), causa: error);
+          }
+
+          ultimaCausa = error;
+
+          if (!esUltimoIntentoGlobal) {
+            onReintento?.call(intentoGlobal + 1, intentosMaximosTotales);
+          }
+
+          // Esperar si es reintento dentro del mismo modelo
+          if (!esUltimoIntentoDelModelo && esperasReintento.isNotEmpty) {
+            final espera = esperasReintento[intentoModelo - 1];
+            if (espera > Duration.zero) {
+              await _esperar(espera);
+            }
+          }
+        }
       }
     }
 
     throw AsistenteIaException(MensajesAsistenteIa.servicioOcupado,
         causa: ultimaCausa);
+  }
+
+  static bool _esErrorThinkingConfig(String textoError) {
+    return textoError.contains('thinking') ||
+        textoError.contains('thinking_config') ||
+        textoError.contains('thinkingconfig') ||
+        textoError.contains('thinking_level') ||
+        textoError.contains('thinkinglevel') ||
+        (textoError.contains('unrecognized') && textoError.contains('field'));
   }
 
   /// Llamada real a Gemini mediante Firebase AI Logic.

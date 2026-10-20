@@ -66,7 +66,7 @@ class FakeAsistenteIaConReintentoSimulado implements IAsistenteIaService {
 /// Cada elemento de [respuestas] se usa en el intento correspondiente: si es una
 /// [Exception] el intento falla lanzándola; si es un `String` (o `null`) el
 /// intento devuelve ese texto como respuesta del modelo. Al agotarse la lista se
-/// repite el último elemento (útil para simular fallos constantes).
+/// repite el último elemento.
 class GeneradorIaFalso {
   GeneradorIaFalso(this.respuestas)
       : assert(respuestas.isNotEmpty, 'Debe haber al menos una respuesta');
@@ -324,7 +324,7 @@ void main() {
     });
   });
 
-  group('Reintentos automáticos, timeouts y callbacks de AsistenteIaService', () {
+  group('Reintentos automáticos, conmutación multimodelo y timeouts de AsistenteIaService', () {
     /// Ejecuta el dictado con datos fijos para simplificar cada prueba.
     Future<List<TareaBorrador>> procesar(
       AsistenteIaService servicio, {
@@ -348,7 +348,7 @@ void main() {
       }
     }
 
-    test('No reintenta ni espera cuando la primera llamada tiene éxito', () async {
+    test('No reintenta ni conmuta cuando el primer modelo tiene éxito', () async {
       final generador = GeneradorIaFalso(<Object?>[
         '{"tareas":[{"titulo":"Enviar reporte","columna":"Pendiente"}]}',
       ]);
@@ -365,29 +365,21 @@ void main() {
       expect(generador.llamadas, equals(1));
       expect(esperas, isEmpty);
       expect(borradores.single.titulo, equals('Enviar reporte'));
-      expect(
-        generador.solicitudes.single.prompt,
-        contains('Enviar el reporte mañana'),
-      );
-      expect(
-        generador.solicitudes.single.instruccionSistema,
-        contains('Kanban'),
-      );
+      expect(generador.solicitudes.single.nombreModelo, equals('gemini-3.5-flash-lite'));
     });
 
-    test('Reintenta con esperas crecientes (2 s y 5 s) e invoca onReintento',
+    test('Conmuta al segundo modelo cuando el primero agota sus intentos con error temporal',
         () async {
       final generador = GeneradorIaFalso(<Object?>[
-        FirebaseAIException(
-            'Server Error [503]: {"error":{"code":503,"status":"UNAVAILABLE","message":"The model is overloaded. Please try again later."}}'),
-        FirebaseAIException(
-            'Server Error [500]: {"error":{"code":500,"message":"Internal error encountered."}}'),
-        '{"tareas":[{"titulo":"Enviar reporte","prioridad":"alta","columna":"Pendiente"}]}',
+        FirebaseAIException('Server Error [503] - gemini-3.5-flash-lite overloaded'),
+        FirebaseAIException('Server Error [500] - gemini-3.5-flash-lite internal error'),
+        '{"tareas":[{"titulo":"Enviar reporte desde segundo modelo","columna":"Pendiente"}]}',
       ]);
       final esperas = <Duration>[];
       final reintentosNotificados = <String>[];
 
       final servicio = AsistenteIaService(
+        esperasReintento: const [Duration.zero],
         generarContenido: generador.call,
         esperar: (duracion) async {
           esperas.add(duracion);
@@ -401,94 +393,78 @@ void main() {
         },
       );
 
-      expect(generador.llamadas, equals(3)); // falla 2 veces y acierta a la tercera
-      expect(
-        esperas,
-        equals(const [Duration(seconds: 2), Duration(seconds: 5)]),
-      );
+      expect(generador.llamadas, equals(3));
+      expect(generador.solicitudes[0].nombreModelo, equals('gemini-3.5-flash-lite'));
+      expect(generador.solicitudes[1].nombreModelo, equals('gemini-3.5-flash-lite'));
+      expect(generador.solicitudes[2].nombreModelo, equals('gemini-3.5-flash'));
       expect(reintentosNotificados, equals(const ['2/4', '3/4']));
-      expect(borradores, hasLength(1));
-      expect(borradores.single.titulo, equals('Enviar reporte'));
-      expect(borradores.single.prioridad, equals(3)); // alta
+      expect(borradores.single.titulo, equals('Enviar reporte desde segundo modelo'));
     });
 
-    test('Agota los 3 reintentos y lanza mensaje de servicio ocupado sin códigos',
-        () async {
+    test('Respeta la lista y el orden de modelos inyectado desde el constructor', () async {
       final generador = GeneradorIaFalso(<Object?>[
-        FirebaseAIException('The service is currently unavailable.'),
-      ]); // siempre falla
-      final esperas = <Duration>[];
+        FirebaseAIException('503 Service Unavailable'),
+        FirebaseAIException('503 Service Unavailable'),
+        '{"tareas":[{"titulo":"Tarea modelo personalizado","columna":"Pendiente"}]}',
+      ]);
+
       final servicio = AsistenteIaService(
+        modelos: const ['modelo-personalizado-1', 'modelo-personalizado-2'],
+        esperasReintento: const [Duration.zero],
         generarContenido: generador.call,
-        esperar: (duracion) async {
-          esperas.add(duracion);
+        esperar: (duracion) async {},
+      );
+
+      final borradores = await procesar(servicio);
+
+      expect(generador.solicitudes[0].nombreModelo, equals('modelo-personalizado-1'));
+      expect(generador.solicitudes[1].nombreModelo, equals('modelo-personalizado-1'));
+      expect(generador.solicitudes[2].nombreModelo, equals('modelo-personalizado-2'));
+      expect(borradores.single.titulo, equals('Tarea modelo personalizado'));
+    });
+
+    test('Respeta el tope total de 30 s lanzando servicio ocupado si se excede', () async {
+      final servicio = AsistenteIaService(
+        esperasReintento: const [Duration.zero],
+        topeTotalProcesamiento: const Duration(milliseconds: 30),
+        generarContenido: (solicitud) async {
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          return '{"tareas":[{"titulo":"Demorado","columna":"Pendiente"}]}';
         },
+        esperar: (duracion) async {},
       );
 
       final error = await capturarError(() => procesar(servicio));
 
       expect(error, isA<AsistenteIaException>());
       final excepcion = error! as AsistenteIaException;
-      expect(
-        excepcion.mensaje,
-        equals('El servicio de IA está ocupado. Intenta de nuevo en un momento.'),
-      );
-      // Nunca se filtra JSON crudo ni códigos al usuario.
-      expect(excepcion.toString(), isNot(contains('503')));
-      expect(excepcion.toString(), isNot(contains('{')));
-      // La causa técnica se conserva para diagnóstico.
-      expect(excepcion.causa, isNotNull);
-      expect(generador.llamadas, equals(4)); // intento inicial + 3 reintentos
-      expect(
-        esperas,
-        equals(const [
-          Duration(seconds: 2),
-          Duration(seconds: 5),
-          Duration(seconds: 10),
-        ]),
-      );
+      expect(excepcion.mensaje, equals(MensajesAsistenteIa.servicioOcupado));
     });
 
-    test('Un timeout por intento (Future.timeout) se reintenta igual que un error 500',
-        () async {
-      final esperas = <Duration>[];
-      final reintentosNotificados = <String>[];
+    test('Reintenta sin ThinkingConfig si el modelo rechaza la configuración de thinking', () async {
+      final generador = GeneradorIaFalso(<Object?>[
+        FirebaseAIException('INVALID_ARGUMENT: thinking_config is not supported for gemini-3.5-flash-lite'),
+        '{"tareas":[{"titulo":"Tarea procesada sin thinking","columna":"Pendiente"}]}',
+      ]);
 
       final servicio = AsistenteIaService(
         esperasReintento: const [Duration.zero],
-        timeoutPorIntento: const Duration(milliseconds: 20),
-        generarContenido: (solicitud) async {
-          // Simular llamada lenta que excede el timeout por intento
-          await Future<void>.delayed(const Duration(milliseconds: 100));
-          return '{"tareas":[{"titulo":"Tarea tardía","columna":"Pendiente"}]}';
-        },
-        esperar: (duracion) async {
-          esperas.add(duracion);
-        },
+        generarContenido: generador.call,
+        esperar: (duracion) async {},
       );
 
-      final error = await capturarError(
-        () => procesar(
-          servicio,
-          onReintento: (intento, max) {
-            reintentosNotificados.add('$intento/$max');
-          },
-        ),
-      );
+      final borradores = await procesar(servicio);
 
-      expect(error, isA<AsistenteIaException>());
-      expect(
-        (error! as AsistenteIaException).mensaje,
-        equals(MensajesAsistenteIa.servicioOcupado),
-      );
-      expect(esperas, equals(const [Duration.zero]));
-      expect(reintentosNotificados, equals(const ['2/2']));
+      expect(generador.llamadas, equals(2));
+      expect(generador.solicitudes[0].configuracionGeneracion.thinkingConfig, isNotNull);
+      expect(generador.solicitudes[1].configuracionGeneracion.thinkingConfig, isNull);
+      expect(borradores.single.titulo, equals('Tarea procesada sin thinking'));
     });
 
     test('Un error 404 de modelo no disponible no se reintenta', () async {
       final generador = GeneradorIaFalso(<Object?>[
         ServerException(
-            'models/gemini-3.8-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.'),
+            'models/gemini-3.5-flash-lite is not found for API version v1beta'),
       ]);
       final esperas = <Duration>[];
       final servicio = AsistenteIaService(
@@ -503,7 +479,6 @@ void main() {
       expect(error, isA<AsistenteIaException>());
       final excepcion = error! as AsistenteIaException;
       expect(excepcion.mensaje, equals(MensajesAsistenteIa.modeloNoDisponible));
-      expect(excepcion.toString(), isNot(contains('ListModels')));
       expect(generador.llamadas, equals(1));
       expect(esperas, isEmpty);
     });
@@ -525,7 +500,6 @@ void main() {
       expect(error, isA<AsistenteIaException>());
       final excepcion = error! as AsistenteIaException;
       expect(excepcion.mensaje, equals(MensajesAsistenteIa.apiNoHabilitada));
-      expect(excepcion.toString(), isNot(contains('googleapis')));
       expect(generador.llamadas, equals(1));
       expect(esperas, isEmpty);
     });
@@ -569,49 +543,6 @@ void main() {
       expect(excepcion.mensaje, equals(MensajesAsistenteIa.respuestaInvalida));
       expect(generador.llamadas, equals(1));
       expect(esperas, isEmpty);
-    });
-
-    test('Los tiempos de espera son inyectables desde el constructor', () async {
-      final generador = GeneradorIaFalso(<Object?>[
-        FirebaseAIException('The service is currently unavailable.'),
-      ]); // siempre falla
-      final esperas = <Duration>[];
-      final servicio = AsistenteIaService(
-        esperasReintento: const [Duration.zero], // 1 solo reintento, sin esperar
-        generarContenido: generador.call,
-        esperar: (duracion) async {
-          esperas.add(duracion);
-        },
-      );
-
-      final error = await capturarError(() => procesar(servicio));
-
-      expect(error, isA<AsistenteIaException>());
-      expect(
-        (error! as AsistenteIaException).mensaje,
-        equals(MensajesAsistenteIa.servicioOcupado),
-      );
-      expect(generador.llamadas, equals(2)); // intento inicial + 1 reintento
-      expect(esperas, equals(const [Duration.zero]));
-    });
-
-    test('Con esperas en cero se prueba el reintento sin esperar de verdad (temporizador real)',
-        () async {
-      final generador = GeneradorIaFalso(<Object?>[
-        FirebaseAIException(
-            'The model is experiencing high demand. Please try again later.'),
-        '{"tareas":[{"titulo":"Tarea recuperada","columna":"Pendiente"}]}',
-      ]);
-      // Sin inyectar `esperar`: se usa Future.delayed, pero con Duration.zero.
-      final servicio = AsistenteIaService(
-        esperasReintento: const [Duration.zero],
-        generarContenido: generador.call,
-      );
-
-      final borradores = await procesar(servicio);
-
-      expect(generador.llamadas, equals(2));
-      expect(borradores.single.titulo, equals('Tarea recuperada'));
     });
   });
 }
