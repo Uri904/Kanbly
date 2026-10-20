@@ -59,4 +59,14 @@ class FormatoUtil {
     final min = fecha.minute.toString().padLeft(2, '0');
     return '$dia/$mes/${fecha.year} $hora:$min';
   }
+
+  // Formateo de hora en formato 12h (hh:mm am/pm)
+  static String formatearHora12h(DateTime? fecha) {
+    if (fecha == null) return '';
+    final hora24 = fecha.hour;
+    final hora = hora24 == 0 ? 12 : (hora24 > 12 ? hora24 - 12 : hora24);
+    final min = fecha.minute.toString().padLeft(2, '0');
+    final periodo = hora24 >= 12 ? 'pm' : 'am';
+    return '$hora:$min $periodo';
+  }
 }

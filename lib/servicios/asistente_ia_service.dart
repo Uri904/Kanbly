@@ -4,15 +4,30 @@ import 'package:firebase_ai/firebase_ai.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' show ClientException;
 import '../modelo/tarea_borrador.dart';
+import '../modelo/tarea.dart';
+import '../modelo/tablero.dart';
+import '../modelo/chat_mensaje.dart';
 
-/// Interfaz abstracta para el servicio de Asistente con IA.
-/// Permite inyectar un doble de prueba (Fake/Mock) en controladores y pruebas unitarias.
+/// Interfaz abstracta para el servicio de Asistente con IA (Dictado por Voz).
 abstract class IAsistenteIaService {
   Future<List<TareaBorrador>> procesarDictadoVoz({
     required String textoTranscrito,
     required DateTime fechaActual,
     required List<String> columnas,
-    required List<Map<String, String>> miembros, // cada mapa contiene 'uid' y 'nombre'
+    required List<Map<String, String>> miembros,
+    void Function(int intento, int intentosMaximos)? onReintento,
+  });
+}
+
+/// Interfaz abstracta para el servicio de Chatbot IA (Fase 2: Solo Lectura con Function Calling).
+abstract class IAsistenteIaChatService {
+  Future<String> enviarMensajeChat({
+    required String mensajeUsuario,
+    required List<ChatMensaje> historial,
+    required Tablero tablero,
+    required List<Tarea> tareasTablero,
+    required Map<String, String> miembrosNombres,
+    required DateTime fechaActual,
     void Function(int intento, int intentosMaximos)? onReintento,
   });
 }
@@ -44,14 +59,10 @@ abstract final class MensajesAsistenteIa {
 
   /// Cualquier otro error no contemplado.
   static const String errorInesperado =
-      'No se pudo procesar el dictado con IA. Intenta de nuevo.';
+      'No se pudo procesar la solicitud con IA. Intenta de nuevo.';
 }
 
 /// Excepción del asistente de IA con un [mensaje] breve en español para el usuario.
-///
-/// [toString] devuelve únicamente el [mensaje], de modo que al mostrarla en la UI
-/// nunca aparezcan códigos HTTP ni JSON crudo. La causa técnica original se
-/// conserva en [causa] para registros o depuración.
 class AsistenteIaException implements Exception {
   AsistenteIaException(this.mensaje, {this.causa});
 
@@ -65,13 +76,15 @@ class AsistenteIaException implements Exception {
   String toString() => mensaje;
 }
 
-/// Datos necesarios para pedirle una generación al modelo de IA.
+/// Datos necesarios para pedirle una generación o conversación al modelo de IA.
 class SolicitudIa {
   const SolicitudIa({
     required this.nombreModelo,
     required this.prompt,
     required this.instruccionSistema,
     required this.configuracionGeneracion,
+    this.tools,
+    this.historial,
   });
 
   /// Modelo de Gemini que atenderá la solicitud.
@@ -85,54 +98,33 @@ class SolicitudIa {
 
   /// Configuración de generación (JSON estructurado, `responseSchema`, etc.).
   final GenerationConfig configuracionGeneracion;
+
+  /// Lista opcional de herramientas (Function Calling).
+  final List<Tool>? tools;
+
+  /// Historial opcional de conversación en formato [Content].
+  final List<Content>? historial;
 }
 
-/// Ejecuta una llamada a `generateContent` y devuelve el texto de la respuesta.
-///
-/// Por defecto usa `FirebaseAI.googleAI()`, pero puede sustituirse desde el
-/// constructor de [AsistenteIaService] para probar los reintentos sin Firebase.
+/// Ejecuta una llamada a `generateContent` o `sendMessage` y devuelve el texto de la respuesta.
 typedef GenerarContenidoIa = Future<String?> Function(SolicitudIa solicitud);
 
 /// Clasificación interna de los errores de IA para decidir si se reintenta
 /// y qué mensaje breve mostrar al usuario.
 enum _ClaseErrorIa {
-  /// Error temporal del servidor (500, 503, "high demand", "overloaded", "unavailable"): se reintenta.
   temporal,
-
-  /// Cuota agotada (429 / RESOURCE_EXHAUSTED): no se reintenta con esperas cortas.
   servicioSaturado,
-
-  /// Modelo inexistente o no soportado (404).
   modeloNoDisponible,
-
-  /// API de Firebase AI Logic deshabilitada o sin permisos (403).
   apiNoHabilitada,
-
-  /// Sin conexión o fallo de red.
   sinConexion,
-
-  /// Respuesta del modelo imposible de interpretar.
   respuestaInvalida,
-
-  /// Cualquier otro error.
   desconocido,
 }
 
 /// Servicio que interactúa con Gemini a través de Firebase AI Logic (`FirebaseAI.googleAI()`).
 ///
-/// REINTENTOS AUTOMÁTICOS Y CONMUTACIÓN MULTIMODELO:
-/// Prueba ordenadamente los modelos configurados (por defecto 'gemini-3.5-flash-lite'
-/// y 'gemini-3.5-flash'). Para cada modelo se realizan hasta 2 intentos (12 s de
-/// timeout por intento y 1 s de espera entre intentos si falla por error temporal).
-/// Si un modelo agota sus intentos con error temporal, se conmuta al siguiente modelo.
-/// Existe un tope total de procesamiento de 30 segundos acumulados.
-///
-/// NOTA DE CONFIGURACIÓN EN CONSOLA DE FIREBASE:
-/// Para que `FirebaseAI.googleAI()` funcione correctamente sin API keys expuestas en el código:
-/// 1. Ve a la consola de Firebase (https://console.firebase.google.com/).
-/// 2. Selecciona tu proyecto y accede a la sección "Build" -> "AI Logic" (o "Vertex AI / Google AI in Firebase").
-/// 3. Habilita la integración de Gemini Developer API.
-class AsistenteIaService implements IAsistenteIaService {
+/// Soporta tanto Fase 1 (Dictado por Voz con JSON estructurado) como Fase 2 (Chatbot de Solo Lectura con Function Calling).
+class AsistenteIaService implements IAsistenteIaService, IAsistenteIaChatService {
   /// Lista predeterminada de modelos ordenados por velocidad y preferencia.
   static const List<String> modelosPredeterminados = <String>[
     'gemini-3.5-flash-lite',
@@ -147,19 +139,13 @@ class AsistenteIaService implements IAsistenteIaService {
   /// Timeout por defecto por intento de generación: 12 segundos.
   static const Duration timeoutPorIntentoPredeterminado = Duration(seconds: 12);
 
-  /// Tope total de procesamiento para todo procesarDictadoVoz: 30 segundos.
+  /// Tope total de procesamiento: 30 segundos.
   static const Duration topeTotalProcesamientoPredeterminado =
       Duration(seconds: 30);
 
   final List<String> modelos;
-
-  /// Esperas entre reintentos por modelo.
   final List<Duration> esperasReintento;
-
-  /// Timeout asignado a cada intento de generateContent.
   final Duration timeoutPorIntento;
-
-  /// Tope máximo acumulado de tiempo para todo procesarDictadoVoz.
   final Duration topeTotalProcesamiento;
 
   final GenerarContenidoIa _generarContenido;
@@ -177,11 +163,12 @@ class AsistenteIaService implements IAsistenteIaService {
         _generarContenido = generarContenido ?? _generarConFirebaseAi,
         _esperar = esperar ?? Future<void>.delayed;
 
-  /// Número de intentos por cada modelo (intento inicial + reintentos configurados).
   int get intentosMaximosPorModelo => esperasReintento.length + 1;
-
-  /// Número total máximo de intentos sumando todos los modelos.
   int get intentosMaximosTotales => modelos.length * intentosMaximosPorModelo;
+
+  // ===========================================================================
+  // FASE 1: DICTADO POR VOZ (CREACIÓN DE BORRADORES DE TAREAS)
+  // ===========================================================================
 
   @override
   Future<List<TareaBorrador>> procesarDictadoVoz({
@@ -207,15 +194,12 @@ class AsistenteIaService implements IAsistenteIaService {
           .where((uid) => uid.isNotEmpty)
           .toList();
 
-      // 1. Calcular offset de zona horaria de la fecha actual (ISO 8601 con offset)
+      final isoOffsetStr = _formatearFechaIsoOffset(fechaActual);
       final offset = fechaActual.timeZoneOffset;
       final horas = offset.inHours.abs().toString().padLeft(2, '0');
       final minutos = (offset.inMinutes.abs() % 60).toString().padLeft(2, '0');
       final signo = offset.isNegative ? '-' : '+';
-      final isoOffsetStr =
-          '${fechaActual.toIso8601String().split('.').first}$signo$horas:$minutos';
 
-      // 2. Construir responseSchema dinámico con enums para columnas, prioridad y uids
       final Schema schemaTareas = Schema.object(
         properties: {
           'tareas': Schema.array(
@@ -271,7 +255,6 @@ class AsistenteIaService implements IAsistenteIaService {
         },
       );
 
-      // 3. Prompt del sistema en español con restricciones estrictas
       final String promptSistema = '''
 Eres un asistente de IA experto en estructurar tareas para tableros Kanban.
 Tu objetivo es analizar la transcripción de dictado por voz del usuario y extraer las tareas mencionadas.
@@ -281,7 +264,7 @@ Contexto proporcionado:
 - Columnas permitidas en el tablero: ${columnasLote.join(', ')}
 - Integrantes disponibles (UID y Nombre): ${miembros.map((m) => '${m['uid']}: ${m['nombre']}').join(', ')}
 
-Reglas de extracción estrictas:
+Reglas de extracción strictly:
 1. "titulo": Extrae el título principal de la tarea. Es un campo obligatorio.
 2. "descripcion": Detalle explicativo de la tarea si fue dictado. Si no se menciona, debe ser null.
 3. "prioridad": Selecciona una de las opciones ["alta", "media", "baja"] si el usuario la menciona o la sugiere claramente. Si no queda clara o no la menciona, asigna null.
@@ -291,11 +274,16 @@ Reglas de extracción estrictas:
 7. REGLA FUNDAMENTAL DE FIDELIDAD: NO dividas una sola tarea en múltiples tareas. Tampoco inventes tareas que no hayan sido mencionadas explícitamente en el dictado. Si algo no está claro, asigna null al campo correspondiente.
 ''';
 
-      // 4. Ejecutar con la lista ordenada de modelos
       final String? responseText = await _generarContenidoConModelosYReintentos(
         promptUsuario: 'Texto dictado por el usuario: "$textoLimpio"',
         promptSistema: promptSistema,
-        schemaTareas: schemaTareas,
+        configuracionGeneracionBuilder: (usarThinking) => GenerationConfig(
+          responseMimeType: 'application/json',
+          responseSchema: schemaTareas,
+          thinkingConfig: usarThinking
+              ? ThinkingConfig.withThinkingLevel(ThinkingLevel.low)
+              : null,
+        ),
         cronometroTotal: cronometroTotal,
         onReintento: onReintento,
       );
@@ -304,7 +292,6 @@ Reglas de extracción estrictas:
         throw AsistenteIaException(MensajesAsistenteIa.respuestaInvalida);
       }
 
-      // 5. Parsear respuesta JSON devuelta por Gemini
       try {
         final dynamic parsedJson = jsonDecode(responseText);
         List<dynamic> listaTareasJson = [];
@@ -338,7 +325,6 @@ Reglas de extracción estrictas:
 
         return borradores;
       } on FormatException catch (error) {
-        // JSON inválido: no se reintenta, se informa de inmediato.
         throw AsistenteIaException(MensajesAsistenteIa.respuestaInvalida,
             causa: error);
       } catch (error) {
@@ -353,12 +339,328 @@ Reglas de extracción estrictas:
     }
   }
 
-  /// Llama a `generateContent` iterando sobre [modelos] y realizando hasta
-  /// [intentosMaximosPorModelo] por modelo. Respetando el tope global de 30 s.
+  // ===========================================================================
+  // FASE 2: CHATBOT DE SOLO LECTURA SOBRE EL TABLERO ACTIVO CON FUNCTION CALLING
+  // ===========================================================================
+
+  @override
+  Future<String> enviarMensajeChat({
+    required String mensajeUsuario,
+    required List<ChatMensaje> historial,
+    required Tablero tablero,
+    required List<Tarea> tareasTablero,
+    required Map<String, String> miembrosNombres,
+    required DateTime fechaActual,
+    void Function(int intento, int intentosMaximos)? onReintento,
+  }) async {
+    final cronometroTotal = Stopwatch()..start();
+    try {
+      final textoLimpio = mensajeUsuario.trim();
+      if (textoLimpio.isEmpty) {
+        return 'Por favor escribe o dicta un mensaje para consultar el tablero.';
+      }
+
+      final isoOffsetStr = _formatearFechaIsoOffset(fechaActual);
+
+      // 1. Declarar las 5 herramientas de Function Calling (Solo Lectura)
+      final autoTareasPorEstado = AutoFunctionDeclaration(
+        name: 'tareasPorEstado',
+        description:
+            'Obtiene la lista de tareas del tablero activo filtradas por el nombre exacto o aproximado de una columna o estado.',
+        parameters: {
+          'estado': Schema.string(
+            description: 'Nombre de la columna o estado (ej. "Pendiente", "En progreso", "Completada").',
+          ),
+        },
+        callable: (args) async {
+          final estadoArg = args['estado']?.toString() ?? '';
+          return {
+            'resultado': ejecutarTareasPorEstado(
+              tareas: tareasTablero,
+              miembrosNombres: miembrosNombres,
+              estado: estadoArg,
+            ),
+          };
+        },
+      );
+
+      final autoTareasDeIntegrante = AutoFunctionDeclaration(
+        name: 'tareasDeIntegrante',
+        description:
+            'Obtiene las tareas asignadas a un integrante específico por su UID o nombre.',
+        parameters: {
+          'integrante': Schema.string(
+            description: 'UID o nombre del integrante del equipo.',
+          ),
+        },
+        callable: (args) async {
+          final integranteArg = args['integrante']?.toString() ?? '';
+          return {
+            'resultado': ejecutarTareasDeIntegrante(
+              tareas: tareasTablero,
+              miembrosNombres: miembrosNombres,
+              integrante: integranteArg,
+            ),
+          };
+        },
+      );
+
+      final autoTareasPorVencer = AutoFunctionDeclaration(
+        name: 'tareasPorVencer',
+        description:
+            'Obtiene las tareas que están próximas a vencer dentro del número de días especificado.',
+        parameters: {
+          'dias': Schema.integer(
+            description: 'Número de días hacia el futuro a considerar (por defecto 7).',
+          ),
+        },
+        callable: (args) async {
+          final diasVal = args['dias'];
+          int dias = 7;
+          if (diasVal is int) dias = diasVal;
+          if (diasVal is num) dias = diasVal.toInt();
+          if (diasVal is String) dias = int.tryParse(diasVal) ?? 7;
+
+          return {
+            'resultado': ejecutarTareasPorVencer(
+              tareas: tareasTablero,
+              miembrosNombres: miembrosNombres,
+              fechaActual: fechaActual,
+              dias: dias,
+            ),
+          };
+        },
+      );
+
+      final autoTareasVencidas = AutoFunctionDeclaration(
+        name: 'tareasVencidas',
+        description:
+            'Obtiene las tareas cuya fecha de vencimiento ya pasó y aún no han sido completadas.',
+        parameters: const {},
+        callable: (args) async {
+          return {
+            'resultado': ejecutarTareasVencidas(
+              tareas: tareasTablero,
+              miembrosNombres: miembrosNombres,
+              fechaActual: fechaActual,
+            ),
+          };
+        },
+      );
+
+      final autoResumenDelTablero = AutoFunctionDeclaration(
+        name: 'resumenDelTablero',
+        description:
+            'Devuelve un resumen general con el conteo de tareas del tablero activo desglosado por columna.',
+        parameters: const {},
+        callable: (args) async {
+          return ejecutarResumenDelTablero(
+            tareas: tareasTablero,
+            columnasTablero: tablero.columnas,
+          );
+        },
+      );
+
+      final tools = [
+        Tool.functionDeclarations([
+          autoTareasPorEstado,
+          autoTareasDeIntegrante,
+          autoTareasPorVencer,
+          autoTareasVencidas,
+          autoResumenDelTablero,
+        ]),
+      ];
+
+      // 2. System Prompt en español con restricciones de solo lectura
+      final promptSistema = '''
+Eres el Asistente IA de Kanbly de SOLO LECTURA sobre el tablero activo.
+Tu objetivo es responder las consultas del usuario utilizando EXCLUSIVAMENTE las funciones de consulta disponibles.
+
+Contexto del tablero activo:
+- Fecha y hora actual del usuario (con offset): $isoOffsetStr
+- Nombre del tablero: ${tablero.nombre}
+- Columnas permitidas: ${tablero.columnas.join(', ')}
+- Integrantes del equipo (UID: Nombre): ${miembrosNombres.entries.map((e) => '${e.key}: ${e.value}').join(', ')}
+
+Reglas de conducta estrictas:
+1. Responde de forma breve, clara, estructurada y amable en español.
+2. Básate ÚNICAMENTE en la información devuelta por las funciones de consulta.
+3. Si una función devuelve una lista vacía o indica que no hay tareas, dilo claramente al usuario. NUNCA inventes tareas, fechas, nombres ni estados.
+4. Si el usuario te pide crear, editar, reordenar, mover o eliminar tareas o tableros, infórmale amablemente que este chatbot es de SOLO LECTURA, y que para crear tareas por voz puede usar el botón del Asistente de Voz (Fase 1) o hacerlo directamente desde el tablero.
+5. Utiliza de forma proactiva la función de consulta más adecuada (`tareasPorEstado`, `tareasDeIntegrante`, `tareasPorVencer`, `tareasVencidas` o `resumenDelTablero`) para obtener los datos precisos antes de responder.
+''';
+
+      // 3. Convertir historial de mensajes a objetos Content de firebase_ai
+      final List<Content> historialContent = historial.map((m) {
+        if (m.rol == RolMensaje.usuario) {
+          return Content.text(m.texto);
+        } else {
+          return Content.model([TextPart(m.texto)]);
+        }
+      }).toList();
+
+      // 4. Ejecutar con la lista ordenada de modelos y reintentos
+      final String? responseText = await _generarContenidoConModelosYReintentos(
+        promptUsuario: textoLimpio,
+        promptSistema: promptSistema,
+        configuracionGeneracionBuilder: (usarThinking) => GenerationConfig(
+          thinkingConfig: usarThinking
+              ? ThinkingConfig.withThinkingLevel(ThinkingLevel.low)
+              : null,
+        ),
+        tools: tools,
+        historial: historialContent,
+        cronometroTotal: cronometroTotal,
+        onReintento: onReintento,
+      );
+
+      if (responseText == null || responseText.trim().isEmpty) {
+        throw AsistenteIaException(MensajesAsistenteIa.respuestaInvalida);
+      }
+
+      return responseText.trim();
+    } finally {
+      cronometroTotal.stop();
+      debugPrint(
+        '[AsistenteIaService] enviarMensajeChat completado en ${cronometroTotal.elapsedMilliseconds} ms',
+      );
+    }
+  }
+
+  // ===========================================================================
+  // FUNCIONES ESTÁTICAS DE CONSULTA (100% TESTEABLES EN PRUEBAS UNITARIAS)
+  // ===========================================================================
+
+  static List<Map<String, dynamic>> ejecutarTareasPorEstado({
+    required List<Tarea> tareas,
+    required Map<String, String> miembrosNombres,
+    required String estado,
+  }) {
+    final estadoLimpio = estado.trim().toLowerCase();
+    final filtradas = tareas.where((t) {
+      if (t.archivada) return false;
+      final estadoNombre = t.estadoNombre.toLowerCase();
+      final estadoValue = t.estado.value.toLowerCase();
+      return estadoNombre == estadoLimpio || estadoValue == estadoLimpio;
+    }).take(20).toList();
+
+    return filtradas.map((t) => _mapearTareaParaIa(t, miembrosNombres)).toList();
+  }
+
+  static List<Map<String, dynamic>> ejecutarTareasDeIntegrante({
+    required List<Tarea> tareas,
+    required Map<String, String> miembrosNombres,
+    required String integrante,
+  }) {
+    final integranteLimpio = integrante.trim().toLowerCase();
+    final filtradas = tareas.where((t) {
+      if (t.archivada) return false;
+      return t.asignadosA.any((uid) {
+        if (uid.toLowerCase() == integranteLimpio) return true;
+        final nombre = miembrosNombres[uid]?.toLowerCase() ?? '';
+        return nombre.contains(integranteLimpio);
+      });
+    }).take(20).toList();
+
+    return filtradas.map((t) => _mapearTareaParaIa(t, miembrosNombres)).toList();
+  }
+
+  static List<Map<String, dynamic>> ejecutarTareasPorVencer({
+    required List<Tarea> tareas,
+    required Map<String, String> miembrosNombres,
+    required DateTime fechaActual,
+    int dias = 7,
+  }) {
+    final limiteFuturo = fechaActual.add(Duration(days: dias));
+    final filtradas = tareas.where((t) {
+      if (t.archivada) return false;
+      if (t.fechaVencimiento == null) return false;
+      return t.fechaVencimiento!.isAfter(fechaActual) &&
+          (t.fechaVencimiento!.isBefore(limiteFuturo) ||
+              t.fechaVencimiento!.isAtSameMomentAs(limiteFuturo));
+    }).take(20).toList();
+
+    return filtradas.map((t) => _mapearTareaParaIa(t, miembrosNombres)).toList();
+  }
+
+  static List<Map<String, dynamic>> ejecutarTareasVencidas({
+    required List<Tarea> tareas,
+    required Map<String, String> miembrosNombres,
+    required DateTime fechaActual,
+  }) {
+    final filtradas = tareas.where((t) {
+      if (t.archivada) return false;
+      if (t.fechaVencimiento == null) return false;
+      if (t.estado == EstadoTarea.completada) return false;
+      return t.fechaVencimiento!.isBefore(fechaActual);
+    }).take(20).toList();
+
+    return filtradas.map((t) => _mapearTareaParaIa(t, miembrosNombres)).toList();
+  }
+
+  static Map<String, dynamic> ejecutarResumenDelTablero({
+    required List<Tarea> tareas,
+    required List<String> columnasTablero,
+  }) {
+    final Map<String, int> conteoPorColumna = {
+      for (final col in columnasTablero) col: 0,
+    };
+
+    int total = 0;
+    for (final t in tareas) {
+      if (t.archivada) continue;
+      total++;
+      final estadoStr = t.estadoNombre;
+      conteoPorColumna[estadoStr] = (conteoPorColumna[estadoStr] ?? 0) + 1;
+    }
+
+    return {
+      'totalTareas': total,
+      'porEstado': conteoPorColumna,
+    };
+  }
+
+  static Map<String, dynamic> _mapearTareaParaIa(
+    Tarea tarea,
+    Map<String, String> miembrosNombres,
+  ) {
+    final String prioridadStr = switch (tarea.prioridad) {
+      3 => 'alta',
+      1 => 'baja',
+      _ => 'media',
+    };
+
+    String? asignadoNombre;
+    if (tarea.asignadosA.isNotEmpty) {
+      final nombres = tarea.asignadosA
+          .map((uid) => miembrosNombres[uid] ?? uid)
+          .where((n) => n.isNotEmpty)
+          .toList();
+      if (nombres.isNotEmpty) {
+        asignadoNombre = nombres.join(', ');
+      }
+    }
+
+    return {
+      'id': tarea.id,
+      'titulo': tarea.titulo,
+      'estado': tarea.estadoNombre,
+      'prioridad': prioridadStr,
+      'fechaVencimiento': tarea.fechaVencimiento?.toIso8601String(),
+      'nombreAsignado': asignadoNombre,
+    };
+  }
+
+  // ===========================================================================
+  // NÚCLEO DE RESILIENCIA Y EJECUCIÓN MULTIMODELO
+  // ===========================================================================
+
   Future<String?> _generarContenidoConModelosYReintentos({
     required String promptUsuario,
     required String promptSistema,
-    required Schema schemaTareas,
+    required GenerationConfig Function(bool usarThinking) configuracionGeneracionBuilder,
+    List<Tool>? tools,
+    List<Content>? historial,
     required Stopwatch cronometroTotal,
     void Function(int intento, int intentosMaximos)? onReintento,
   }) async {
@@ -375,7 +677,6 @@ Reglas de extracción estrictas:
           intentoModelo++) {
         intentoGlobal++;
 
-        // 1. Verificar si se superó el tope total de tiempo
         if (cronometroTotal.elapsed >= topeTotalProcesamiento) {
           debugPrint(
             '[AsistenteIaService] Se superó el tope total de procesamiento de ${topeTotalProcesamiento.inSeconds} s',
@@ -399,13 +700,9 @@ Reglas de extracción estrictas:
           nombreModelo: nombreModelo,
           prompt: promptUsuario,
           instruccionSistema: promptSistema,
-          configuracionGeneracion: GenerationConfig(
-            responseMimeType: 'application/json',
-            responseSchema: schemaTareas,
-            thinkingConfig: usarThinking
-                ? ThinkingConfig.withThinkingLevel(ThinkingLevel.low)
-                : null,
-          ),
+          configuracionGeneracion: configuracionGeneracionBuilder(usarThinking),
+          tools: tools,
+          historial: historial,
         );
 
         final cronometroIntento = Stopwatch()..start();
@@ -427,7 +724,6 @@ Reglas de extracción estrictas:
             '[AsistenteIaService] Modelo $nombreModelo - Intento $intentoModelo/$intentosMaximosPorModelo (Global $intentoGlobal/$intentosMaximosTotales) falló en ${cronometroIntento.elapsedMilliseconds} ms. Clase: $clase. Error: $error',
           );
 
-          // Si el modelo rechazó ThinkingConfig, lo registramos y reintentamos ese intento sin thinking
           final textoError = error.toString().toLowerCase();
           if (usarThinking && _esErrorThinkingConfig(textoError)) {
             debugPrint(
@@ -444,8 +740,6 @@ Reglas de extracción estrictas:
           final esUltimoIntentoGlobal =
               intentoGlobal == intentosMaximosTotales;
 
-          // Si el modelo no está disponible (404) y aún quedan otros modelos en la lista,
-          // se conmuta inmediatamente al siguiente modelo sin agotar los intentos restantes de este.
           if (clase == _ClaseErrorIa.modeloNoDisponible && !esUltimoModelo) {
             debugPrint(
               '[AsistenteIaService] Modelo $nombreModelo no disponible (404). Conmutando inmediatamente al siguiente modelo...',
@@ -468,7 +762,6 @@ Reglas de extracción estrictas:
             onReintento?.call(intentoGlobal + 1, intentosMaximosTotales);
           }
 
-          // Esperar si es reintento dentro del mismo modelo
           if (!esUltimoIntentoDelModelo && esperasReintento.isNotEmpty) {
             final espera = esperasReintento[intentoModelo - 1];
             if (espera > Duration.zero) {
@@ -481,6 +774,14 @@ Reglas de extracción estrictas:
 
     throw AsistenteIaException(MensajesAsistenteIa.servicioOcupado,
         causa: ultimaCausa);
+  }
+
+  static String _formatearFechaIsoOffset(DateTime fecha) {
+    final offset = fecha.timeZoneOffset;
+    final horas = offset.inHours.abs().toString().padLeft(2, '0');
+    final minutos = (offset.inMinutes.abs() % 60).toString().padLeft(2, '0');
+    final signo = offset.isNegative ? '-' : '+';
+    return '${fecha.toIso8601String().split('.').first}$signo$horas:$minutos';
   }
 
   static bool _esErrorThinkingConfig(String textoError) {
@@ -498,16 +799,25 @@ Reglas de extracción estrictas:
       model: solicitud.nombreModelo,
       generationConfig: solicitud.configuracionGeneracion,
       systemInstruction: Content.system(solicitud.instruccionSistema),
+      tools: solicitud.tools,
     );
 
-    final response = await generativeModel.generateContent([
-      Content.text(solicitud.prompt),
-    ]);
-
-    return response.text;
+    if (solicitud.historial != null || (solicitud.tools != null && solicitud.tools!.isNotEmpty)) {
+      final chatSession = generativeModel.startChat(
+        history: solicitud.historial ?? const [],
+      );
+      final response = await chatSession.sendMessage(
+        Content.text(solicitud.prompt),
+      );
+      return response.text;
+    } else {
+      final response = await generativeModel.generateContent([
+        Content.text(solicitud.prompt),
+      ]);
+      return response.text;
+    }
   }
 
-  /// Traduce el error original a una clase interna para decidir reintentos y mensajes.
   static _ClaseErrorIa _clasificarError(Object error) {
     if (error is ServiceApiNotEnabled) return _ClaseErrorIa.apiNoHabilitada;
     if (error is QuotaExceeded) return _ClaseErrorIa.servicioSaturado;
@@ -519,12 +829,10 @@ Reglas de extracción estrictas:
     return _clasificarPorMensaje(_textoDeError(error));
   }
 
-  /// Texto de diagnóstico del error (incluye el tipo concreto del SDK cuando aplica).
   static String _textoDeError(Object error) => error is FirebaseAIException
       ? '${error.runtimeType} ${error.message}'
       : error.toString();
 
-  /// Clasifica un error a partir de su texto, sin exponerlo nunca al usuario.
   static _ClaseErrorIa _clasificarPorMensaje(String textoOriginal) {
     final texto = textoOriginal.toLowerCase();
 
@@ -553,7 +861,6 @@ Reglas de extracción estrictas:
   static bool _contieneAlguno(String texto, List<String> marcadores) =>
       marcadores.any(texto.contains);
 
-  /// Mensaje breve en español para cada clase de error.
   static String _mensajeParaClase(_ClaseErrorIa clase) {
     switch (clase) {
       case _ClaseErrorIa.temporal:
@@ -572,13 +879,11 @@ Reglas de extracción estrictas:
     }
   }
 
-  /// Códigos HTTP 5xx (500, 502, 503, 504...) presentes en el mensaje de error.
   static final RegExp _codigo5xx = RegExp(r'\b5\d{2}\b');
   static final RegExp _codigo403 = RegExp(r'\b403\b');
   static final RegExp _codigo404 = RegExp(r'\b404\b');
   static final RegExp _codigo429 = RegExp(r'\b429\b');
 
-  /// Señales de fallo de red o falta de conexión.
   static const List<String> _marcadoresSinConexion = <String>[
     'socketexception',
     'clientexception',
@@ -598,7 +903,6 @@ Reglas de extracción estrictas:
     'xmlhttprequest error',
   ];
 
-  /// Señales de API deshabilitada o sin permisos (403 / PERMISSION_DENIED).
   static const List<String> _marcadoresApiNoHabilitada = <String>[
     'firebase ai logic',
     'service_api_not_enabled',
@@ -611,7 +915,6 @@ Reglas de extracción estrictas:
     'permission denied',
   ];
 
-  /// Señales de modelo inexistente o no soportado (404 / NOT_FOUND).
   static const List<String> _marcadoresModeloNoDisponible = <String>[
     'not found',
     'not_found',
@@ -623,7 +926,6 @@ Reglas de extracción estrictas:
     'list models',
   ];
 
-  /// Señales de sobrecarga temporal del servicio (reintentables).
   static const List<String> _marcadoresTemporales = <String>[
     'server error',
     'high demand',
@@ -636,7 +938,6 @@ Reglas de extracción estrictas:
     'deadline_exceeded',
   ];
 
-  /// Señales de cuota agotada (429 / RESOURCE_EXHAUSTED): no se reintenta.
   static const List<String> _marcadoresCuota = <String>[
     'quota',
     'resource_exhausted',

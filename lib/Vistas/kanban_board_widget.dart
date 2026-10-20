@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 // --- IMPORTS DE LA ARQUITECTURA DEL EQUIPO ---
 import 'package:provider/provider.dart';
 import '../controlador/asistente_ia_controller.dart';
+import '../controlador/asistente_ia_chat_controller.dart';
+import 'asistente_ia_chat_view.dart';
 import '../modelo/usuario.dart';
 import 'captura_voz_view.dart';
 import 'encabezado.dart';
@@ -125,6 +127,13 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                           icon: const Icon(Icons.auto_awesome_rounded, color: Color(0xFF63D0A1), size: 26),
                           tooltip: 'Asistente IA por Voz',
                           onPressed: () => _abrirAsistenteIa(context, tableroActivo),
+                        ),
+                      // --- BOTÓN CHATBOT IA DE CONSULTA (SOLO LECTURA) ---
+                      if (tableroActivo != null && (tableroActivo.creadorId == currentUid || tableroActivo.miembrosIds.contains(currentUid)))
+                        IconButton(
+                          icon: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF63D0A1), size: 24),
+                          tooltip: 'Chatbot IA (Consulta de Tablero)',
+                          onPressed: () => _abrirChatbotIa(context, tableroActivo),
                         ),
                       // --- BOTÓN DE EDICIÓN Y PERSONALIZACIÓN DEL TABLERO (SOLO DUEÑO O ADMIN) ---
                       if (tableroActivo != null && tableroActivo.esAdminOCreador(currentUid))
@@ -596,6 +605,62 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
           child: CapturaVozView(
             tablero: tableroActivo,
             miembrosEquipo: miembros,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _abrirChatbotIa(BuildContext context, Tablero? tableroActivo) async {
+    if (tableroActivo == null) return;
+
+    final currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final puedeVer = tableroActivo.creadorId == currentUid ||
+        tableroActivo.miembrosIds.contains(currentUid);
+
+    if (!puedeVer) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No tienes permiso para ver este tablero'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Cargar tareas del tablero activo
+    List<Tarea> tareas = [];
+    try {
+      tareas = await _firestoreService.obtenerTareasDeTablero(tableroActivo.id);
+    } catch (_) {}
+
+    // Cargar mapa de nombres de integrantes
+    final Map<String, String> miembrosNombres = {};
+    final uidsACargar = {tableroActivo.creadorId, ...tableroActivo.miembrosIds};
+
+    for (final uid in uidsACargar) {
+      if (uid.isNotEmpty) {
+        try {
+          final usuario = await _firestoreService.obtenerUsuarioPorId(uid);
+          if (usuario != null) {
+            miembrosNombres[uid] = usuario.nombre;
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (!mounted) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChangeNotifierProvider(
+          create: (_) => AsistenteIaChatController(),
+          child: AsistenteIaChatView(
+            tablero: tableroActivo,
+            tareasTablero: tareas,
+            miembrosNombres: miembrosNombres,
           ),
         ),
       ),
