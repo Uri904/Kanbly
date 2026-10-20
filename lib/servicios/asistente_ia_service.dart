@@ -444,6 +444,19 @@ Reglas de extracción estrictas:
           final esUltimoIntentoGlobal =
               intentoGlobal == intentosMaximosTotales;
 
+          // Si el modelo no está disponible (404) y aún quedan otros modelos en la lista,
+          // se conmuta inmediatamente al siguiente modelo sin agotar los intentos restantes de este.
+          if (clase == _ClaseErrorIa.modeloNoDisponible && !esUltimoModelo) {
+            debugPrint(
+              '[AsistenteIaService] Modelo $nombreModelo no disponible (404). Conmutando inmediatamente al siguiente modelo...',
+            );
+            ultimaCausa = error;
+            if (!esUltimoIntentoGlobal) {
+              onReintento?.call(intentoGlobal + 1, intentosMaximosTotales);
+            }
+            break;
+          }
+
           if (clase != _ClaseErrorIa.temporal ||
               (esUltimoModelo && esUltimoIntentoDelModelo)) {
             throw AsistenteIaException(_mensajeParaClase(clase), causa: error);

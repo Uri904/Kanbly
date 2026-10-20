@@ -461,10 +461,42 @@ void main() {
       expect(borradores.single.titulo, equals('Tarea procesada sin thinking'));
     });
 
-    test('Un error 404 de modelo no disponible no se reintenta', () async {
+    test('Conmuta inmediatamente al segundo modelo cuando el primero da 404 (modeloNoDisponible) y el resultado es exitoso',
+        () async {
       final generador = GeneradorIaFalso(<Object?>[
         ServerException(
             'models/gemini-3.5-flash-lite is not found for API version v1beta'),
+        '{"tareas":[{"titulo":"Tarea exitosa desde segundo modelo","columna":"Pendiente"}]}',
+      ]);
+
+      final reintentosNotificados = <String>[];
+
+      final servicio = AsistenteIaService(
+        esperasReintento: const [Duration.zero],
+        generarContenido: generador.call,
+        esperar: (duracion) async {},
+      );
+
+      final borradores = await procesar(
+        servicio,
+        onReintento: (intento, max) {
+          reintentosNotificados.add('$intento/$max');
+        },
+      );
+
+      expect(generador.llamadas, equals(2));
+      expect(generador.solicitudes[0].nombreModelo, equals('gemini-3.5-flash-lite'));
+      expect(generador.solicitudes[1].nombreModelo, equals('gemini-3.5-flash'));
+      expect(reintentosNotificados, equals(const ['2/4']));
+      expect(borradores.single.titulo, equals('Tarea exitosa desde segundo modelo'));
+    });
+
+    test('Un error 404 en el último modelo lanza la excepción modeloNoDisponible', () async {
+      final generador = GeneradorIaFalso(<Object?>[
+        ServerException(
+            'models/gemini-3.5-flash-lite is not found for API version v1beta'),
+        ServerException(
+            'models/gemini-3.5-flash is not found for API version v1beta'),
       ]);
       final esperas = <Duration>[];
       final servicio = AsistenteIaService(
@@ -479,7 +511,7 @@ void main() {
       expect(error, isA<AsistenteIaException>());
       final excepcion = error! as AsistenteIaException;
       expect(excepcion.mensaje, equals(MensajesAsistenteIa.modeloNoDisponible));
-      expect(generador.llamadas, equals(1));
+      expect(generador.llamadas, equals(2));
       expect(esperas, isEmpty);
     });
 
