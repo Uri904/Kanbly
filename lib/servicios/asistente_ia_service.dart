@@ -341,7 +341,7 @@ Reglas de extracción estrictas:
   }
 
   // ===========================================================================
-  // FASE 2: CHATBOT DE SOLO LECTURA SOBRE EL TABLERO ACTIVO CON FUNCTION CALLING
+  // FASE 2: CHATBOT DE SOLO LECTURA SOBRE EL TABLERO ACTIVO SIN FUNCTION CALLING
   // ===========================================================================
 
   @override
@@ -363,130 +363,37 @@ Reglas de extracción estrictas:
 
       final isoOffsetStr = _formatearFechaIsoOffset(fechaActual);
 
-      // 1. Declarar las 5 herramientas de Function Calling (Solo Lectura)
-      final autoTareasPorEstado = AutoFunctionDeclaration(
-        name: 'tareasPorEstado',
-        description:
-            'Obtiene la lista de tareas del tablero activo filtradas por el nombre exacto o aproximado de una columna o estado.',
-        parameters: {
-          'estado': Schema.string(
-            description: 'Nombre de la columna o estado (ej. "Pendiente", "En progreso", "Completada").',
-          ),
-        },
-        callable: (args) async {
-          final estadoArg = args['estado']?.toString() ?? '';
-          return ejecutarTareasPorEstado(
-            tareas: tareasTablero,
-            miembrosNombres: miembrosNombres,
-            estado: estadoArg,
-            columnasTablero: tablero.columnas,
-          );
-        },
+      // 1. Construir contexto del tablero en formato JSON compacto
+      final contextoMap = construirContextoTablero(
+        tablero: tablero,
+        tareasTablero: tareasTablero,
+        miembrosNombres: miembrosNombres,
+        fechaActual: fechaActual,
       );
-
-      final autoTareasDeIntegrante = AutoFunctionDeclaration(
-        name: 'tareasDeIntegrante',
-        description:
-            'Obtiene las tareas asignadas a un integrante específico por su UID o nombre.',
-        parameters: {
-          'integrante': Schema.string(
-            description: 'UID o nombre del integrante del equipo.',
-          ),
-        },
-        callable: (args) async {
-          final integranteArg = args['integrante']?.toString() ?? '';
-          return ejecutarTareasDeIntegrante(
-            tareas: tareasTablero,
-            miembrosNombres: miembrosNombres,
-            integrante: integranteArg,
-          );
-        },
-      );
-
-      final autoTareasPorVencer = AutoFunctionDeclaration(
-        name: 'tareasPorVencer',
-        description:
-            'Obtiene las tareas que están próximas a vencer dentro del número de días especificado.',
-        parameters: {
-          'dias': Schema.integer(
-            description: 'Número de días hacia el futuro a considerar (por defecto 7).',
-          ),
-        },
-        callable: (args) async {
-          final diasVal = args['dias'];
-          int dias = 7;
-          if (diasVal is int) dias = diasVal;
-          if (diasVal is num) dias = diasVal.toInt();
-          if (diasVal is String) dias = int.tryParse(diasVal) ?? 7;
-
-          return ejecutarTareasPorVencer(
-            tareas: tareasTablero,
-            miembrosNombres: miembrosNombres,
-            fechaActual: fechaActual,
-            dias: dias,
-          );
-        },
-      );
-
-      final autoTareasVencidas = AutoFunctionDeclaration(
-        name: 'tareasVencidas',
-        description:
-            'Obtiene las tareas cuya fecha de vencimiento ya pasó y aún no han sido completadas.',
-        parameters: const {},
-        callable: (args) async {
-          return ejecutarTareasVencidas(
-            tareas: tareasTablero,
-            miembrosNombres: miembrosNombres,
-            fechaActual: fechaActual,
-            columnasTablero: tablero.columnas,
-          );
-        },
-      );
-
-      final autoResumenDelTablero = AutoFunctionDeclaration(
-        name: 'resumenDelTablero',
-        description:
-            'Devuelve un resumen general con el conteo de tareas del tablero activo desglosado por columna.',
-        parameters: const {},
-        callable: (args) async {
-          return ejecutarResumenDelTablero(
-            tareas: tareasTablero,
-            columnasTablero: tablero.columnas,
-          );
-        },
-      );
-
-      final tools = [
-        Tool.functionDeclarations([
-          autoTareasPorEstado,
-          autoTareasDeIntegrante,
-          autoTareasPorVencer,
-          autoTareasVencidas,
-          autoResumenDelTablero,
-        ]),
-      ];
+      final contextoJson = jsonEncode(contextoMap);
 
       // 2. System Prompt en español con restricciones de solo lectura
       final promptSistema = '''
 Eres el Asistente IA de Kanbly de SOLO LECTURA sobre el tablero activo.
-Tu objetivo es responder las consultas del usuario utilizando EXCLUSIVAMENTE las funciones de consulta disponibles.
+Tu objetivo es responder las consultas del usuario utilizando EXCLUSIVAMENTE la información del contexto del tablero proporcionado a continuación.
 
 Contexto del tablero activo:
 - Fecha y hora actual del usuario (con offset): $isoOffsetStr
 - Nombre del tablero: ${tablero.nombre}
 - Columnas permitidas: ${tablero.columnas.join(', ')}
 - Integrantes del equipo (UID: Nombre): ${miembrosNombres.entries.map((e) => '${e.key}: ${e.value}').join(', ')}
+- Datos del tablero en JSON compacto:
+$contextoJson
 
 Reglas de conducta estrictas:
 1. Responde de forma breve, clara, estructurada y amable en español.
-2. Básate ÚNICAMENTE en la información devuelta por las funciones de consulta.
-3. Si una función devuelve una lista vacía o indica que no hay tareas, dilo claramente al usuario. NUNCA inventes tareas, fechas, nombres ni estados.
+2. Básate ÚNICAMENTE en la información del contexto proporcionado.
+3. Si el contexto indica que no hay tareas o está vacío, dilo claramente al usuario. NUNCA inventes tareas, fechas, nombres ni estados.
 4. Si el usuario te pide crear, editar, reordenar, mover o eliminar tareas o tableros, infórmale amablemente que este chatbot es de SOLO LECTURA, y que para crear tareas por voz puede usar el botón del Asistente de Voz (Fase 1) o hacerlo directamente desde el tablero.
-5. Utiliza de forma proactiva la función de consulta más adecuada (`tareasPorEstado`, `tareasDeIntegrante`, `tareasPorVencer`, `tareasVencidas` o `resumenDelTablero`) para obtener los datos precisos antes de responder.
-6. Si una función de consulta indica que `total` es mayor que `mostradas`, avisa explícitamente al usuario en tu respuesta indicando que solo le estás mostrando `mostradas` de un total de `total` tareas existentes.
+5. Si un bloque o lista de tareas indica que `total` es mayor que `mostradas`, avisa explícitamente al usuario en tu respuesta indicando que solo le estás mostrando `mostradas` de un total de `total` tareas existentes.
 ''';
 
-      // 3. Convertir historial de mensajes a objetos Content de firebase_ai
+      // 3. Convertir historial de mensajes a objetos Content de firebase_ai (solo roles user y model)
       final List<Content> historialContent = historial.map((m) {
         if (m.rol == RolMensaje.usuario) {
           return Content.text(m.texto);
@@ -495,7 +402,7 @@ Reglas de conducta estrictas:
         }
       }).toList();
 
-      // 4. Ejecutar con la lista ordenada de modelos y reintentos
+      // 4. Ejecutar con la lista ordenada de modelos y reintentos (sin tools)
       final String? responseText = await _generarContenidoConModelosYReintentos(
         promptUsuario: textoLimpio,
         promptSistema: promptSistema,
@@ -504,7 +411,6 @@ Reglas de conducta estrictas:
               ? ThinkingConfig.withThinkingLevel(ThinkingLevel.low)
               : null,
         ),
-        tools: tools,
         historial: historialContent,
         cronometroTotal: cronometroTotal,
         onReintento: onReintento,
@@ -848,6 +754,111 @@ Reglas de conducta estrictas:
         causa: ultimaCausa);
   }
 
+  /// Construye el bloque de contexto en formato Map (JSON) compacto para el chatbot de solo lectura.
+  ///
+  /// Reutiliza [ejecutarResumenDelTablero], [ejecutarTareasVencidas], [ejecutarTareasPorVencer]
+  /// y [KanbanUtils] para compilar:
+  /// - `resumen`: conteos por columna del tablero.
+  /// - `tareasVencidas`: tareas vencidas no completadas.
+  /// - `tareasPorVencer`: tareas próximas a vencer en 7 días.
+  /// - `listaTareas`: tareas no archivadas (máximo 100, ordenadas: vencidas, por vencer, el resto)
+  ///   con los campos `total`, `mostradas` y la lista de objetos con solo:
+  ///   `titulo`, `estado`, `prioridad`, `fechaVencimiento`, `nombreAsignado`.
+  static Map<String, dynamic> construirContextoTablero({
+    required Tablero tablero,
+    required List<Tarea> tareasTablero,
+    required Map<String, String> miembrosNombres,
+    required DateTime fechaActual,
+  }) {
+    final resumen = ejecutarResumenDelTablero(
+      tareas: tareasTablero,
+      columnasTablero: tablero.columnas,
+    );
+
+    final vencidas = ejecutarTareasVencidas(
+      tareas: tareasTablero,
+      miembrosNombres: miembrosNombres,
+      fechaActual: fechaActual,
+      columnasTablero: tablero.columnas,
+    );
+
+    final porVencer = ejecutarTareasPorVencer(
+      tareas: tareasTablero,
+      miembrosNombres: miembrosNombres,
+      fechaActual: fechaActual,
+      dias: 7,
+    );
+
+    final limite7Dias = fechaActual.add(const Duration(days: 7));
+
+    bool esVencida(Tarea t) {
+      if (t.fechaVencimiento == null) return false;
+      if (KanbanUtils.esTareaCompletada(t, tablero.columnas)) return false;
+      return t.fechaVencimiento!.isBefore(fechaActual);
+    }
+
+    bool esPorVencer(Tarea t) {
+      if (t.fechaVencimiento == null) return false;
+      if (esVencida(t)) return false;
+      return t.fechaVencimiento!.isAfter(fechaActual) &&
+          (t.fechaVencimiento!.isBefore(limite7Dias) ||
+              t.fechaVencimiento!.isAtSameMomentAs(limite7Dias));
+    }
+
+    final noArchivadas = tareasTablero.where((t) => !t.archivada).toList();
+    final totalNoArchivadas = noArchivadas.length;
+
+    noArchivadas.sort((a, b) {
+      final catA = esVencida(a) ? 0 : (esPorVencer(a) ? 1 : 2);
+      final catB = esVencida(b) ? 0 : (esPorVencer(b) ? 1 : 2);
+      if (catA != catB) return catA.compareTo(catB);
+      if (a.fechaVencimiento != null && b.fechaVencimiento != null) {
+        return a.fechaVencimiento!.compareTo(b.fechaVencimiento!);
+      }
+      return 0;
+    });
+
+    final mostradas = noArchivadas.take(100).toList();
+
+    final listaMapeada = mostradas.map((t) {
+      final String prioridadStr = switch (t.prioridad) {
+        3 => 'alta',
+        1 => 'baja',
+        _ => 'media',
+      };
+
+      String? asignadoNombre;
+      if (t.asignadosA.isNotEmpty) {
+        final nombres = t.asignadosA
+            .map((uid) => miembrosNombres[uid] ?? uid)
+            .where((n) => n.isNotEmpty)
+            .toList();
+        if (nombres.isNotEmpty) {
+          asignadoNombre = nombres.join(', ');
+        }
+      }
+
+      return {
+        'titulo': t.titulo,
+        'estado': t.estadoNombre,
+        'prioridad': prioridadStr,
+        'fechaVencimiento': t.fechaVencimiento?.toIso8601String(),
+        'nombreAsignado': asignadoNombre,
+      };
+    }).toList();
+
+    return {
+      'resumen': resumen,
+      'tareasVencidas': vencidas,
+      'tareasPorVencer': porVencer,
+      'listaTareas': {
+        'total': totalNoArchivadas,
+        'mostradas': mostradas.length,
+        'tareas': listaMapeada,
+      },
+    };
+  }
+
   static String _formatearFechaIsoOffset(DateTime fecha) {
     final offset = fecha.timeZoneOffset;
     final horas = offset.inHours.abs().toString().padLeft(2, '0');
@@ -874,20 +885,13 @@ Reglas de conducta estrictas:
       tools: solicitud.tools,
     );
 
-    if (solicitud.historial != null || (solicitud.tools != null && solicitud.tools!.isNotEmpty)) {
-      final chatSession = generativeModel.startChat(
-        history: solicitud.historial ?? const [],
-      );
-      final response = await chatSession.sendMessage(
-        Content.text(solicitud.prompt),
-      );
-      return response.text;
-    } else {
-      final response = await generativeModel.generateContent([
-        Content.text(solicitud.prompt),
-      ]);
-      return response.text;
-    }
+    final contents = <Content>[
+      if (solicitud.historial != null) ...solicitud.historial!,
+      Content.text(solicitud.prompt),
+    ];
+
+    final response = await generativeModel.generateContent(contents);
+    return response.text;
   }
 
   static _ClaseErrorIa _clasificarError(Object error) {

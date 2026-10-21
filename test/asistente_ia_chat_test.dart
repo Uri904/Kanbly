@@ -75,9 +75,169 @@ void main() {
     'user_dev2': 'Ana Diseñadora',
   };
 
-  group('Pruebas de Funciones de Consulta de Solo Lectura (Function Calling)', () {
+  group('Pruebas de Construcción del Contexto JSON Compacto para el Chatbot', () {
+    test('construirContextoTablero compila resumen con conteos por columna iguales al tablero y totales correctos', () {
+      final tareas = [
+        Tarea(
+          id: 't1',
+          titulo: 'Tarea Pendiente',
+          estado: EstadoTarea.pendiente,
+          estadoNombre: 'Pendiente',
+          tableroId: 'tablero_1',
+          fechaCreacion: fechaReferencia,
+        ),
+        Tarea(
+          id: 't2',
+          titulo: 'Tarea En Progreso',
+          estado: EstadoTarea.enProgreso,
+          estadoNombre: 'En progreso',
+          tableroId: 'tablero_1',
+          fechaCreacion: fechaReferencia,
+        ),
+        Tarea(
+          id: 't3',
+          titulo: 'Tarea Completada',
+          estado: EstadoTarea.completada,
+          estadoNombre: 'Completada',
+          tableroId: 'tablero_1',
+          fechaCreacion: fechaReferencia,
+        ),
+      ];
+
+      final contexto = AsistenteIaService.construirContextoTablero(
+        tablero: tableroPrueba,
+        tareasTablero: tareas,
+        miembrosNombres: miembrosMap,
+        fechaActual: fechaReferencia,
+      );
+
+      expect(contexto.containsKey('resumen'), isTrue);
+      expect(contexto.containsKey('tareasVencidas'), isTrue);
+      expect(contexto.containsKey('tareasPorVencer'), isTrue);
+      expect(contexto.containsKey('listaTareas'), isTrue);
+
+      final resumen = contexto['resumen'] as Map<String, dynamic>;
+      expect(resumen['totalTareas'], equals(3));
+      final porEstado = Map<String, int>.from(resumen['porEstado']);
+      expect(porEstado['Pendiente'], equals(1));
+      expect(porEstado['En progreso'], equals(1));
+      expect(porEstado['Completada'], equals(1));
+    });
+
+    test('construirContextoTablero limita listaTareas a máximo 100 y reporta total y mostradas', () {
+      final List<Tarea> tareas120 = List.generate(120, (index) {
+        return Tarea(
+          id: 'tarea_$index',
+          titulo: 'Tarea $index',
+          estado: EstadoTarea.pendiente,
+          estadoNombre: 'Pendiente',
+          tableroId: 'tablero_1',
+          fechaCreacion: fechaReferencia,
+        );
+      });
+
+      final contexto = AsistenteIaService.construirContextoTablero(
+        tablero: tableroPrueba,
+        tareasTablero: tareas120,
+        miembrosNombres: miembrosMap,
+        fechaActual: fechaReferencia,
+      );
+
+      final listaTareasMap = contexto['listaTareas'] as Map<String, dynamic>;
+      expect(listaTareasMap['total'], equals(120));
+      expect(listaTareasMap['mostradas'], equals(100));
+
+      final tareas = listaTareasMap['tareas'] as List<dynamic>;
+      expect(tareas.length, equals(100));
+    });
+
+    test('listaTareas incluye sólo los campos titulo, estado, prioridad, fechaVencimiento y nombreAsignado', () {
+      final tareas = [
+        Tarea(
+          id: 't1',
+          titulo: 'Tarea de Inspección',
+          estado: EstadoTarea.pendiente,
+          estadoNombre: 'Pendiente',
+          tableroId: 'tablero_1',
+          fechaCreacion: fechaReferencia,
+          prioridad: 3,
+          fechaVencimiento: fechaReferencia.add(const Duration(days: 2)),
+          asignadosA: const ['user_dev1'],
+        ),
+      ];
+
+      final contexto = AsistenteIaService.construirContextoTablero(
+        tablero: tableroPrueba,
+        tareasTablero: tareas,
+        miembrosNombres: miembrosMap,
+        fechaActual: fechaReferencia,
+      );
+
+      final listaTareasMap = contexto['listaTareas'] as Map<String, dynamic>;
+      final primeraTarea = (listaTareasMap['tareas'] as List<dynamic>).first as Map<String, dynamic>;
+
+      expect(primeraTarea.keys.toSet(), equals({
+        'titulo',
+        'estado',
+        'prioridad',
+        'fechaVencimiento',
+        'nombreAsignado',
+      }));
+      expect(primeraTarea['titulo'], equals('Tarea de Inspección'));
+      expect(primeraTarea['estado'], equals('Pendiente'));
+      expect(primeraTarea['prioridad'], equals('alta'));
+      expect(primeraTarea['nombreAsignado'], equals('Carlos Programador'));
+      expect(primeraTarea.containsKey('id'), isFalse);
+      expect(primeraTarea.containsKey('comentarios'), isFalse);
+    });
+
+    test('listaTareas ordena estrictamente: 1. Vencidas, 2. Por vencer (en 7 días), 3. El resto', () {
+      final tareas = [
+        Tarea(
+          id: 't_normal',
+          titulo: 'Tarea Sin Fecha',
+          estado: EstadoTarea.pendiente,
+          estadoNombre: 'Pendiente',
+          tableroId: 'tablero_1',
+          fechaCreacion: fechaReferencia,
+        ),
+        Tarea(
+          id: 't_por_vencer',
+          titulo: 'Tarea Próxima a Vencer',
+          estado: EstadoTarea.pendiente,
+          estadoNombre: 'Pendiente',
+          tableroId: 'tablero_1',
+          fechaCreacion: fechaReferencia,
+          fechaVencimiento: fechaReferencia.add(const Duration(days: 3)),
+        ),
+        Tarea(
+          id: 't_vencida',
+          titulo: 'Tarea Atrasada',
+          estado: EstadoTarea.pendiente,
+          estadoNombre: 'Pendiente',
+          tableroId: 'tablero_1',
+          fechaCreacion: fechaReferencia,
+          fechaVencimiento: fechaReferencia.subtract(const Duration(days: 2)),
+        ),
+      ];
+
+      final contexto = AsistenteIaService.construirContextoTablero(
+        tablero: tableroPrueba,
+        tareasTablero: tareas,
+        miembrosNombres: miembrosMap,
+        fechaActual: fechaReferencia,
+      );
+
+      final listaTareas = (contexto['listaTareas'] as Map<String, dynamic>)['tareas'] as List<dynamic>;
+
+      expect(listaTareas[0]['titulo'], equals('Tarea Atrasada'));
+      expect(listaTareas[1]['titulo'], equals('Tarea Próxima a Vencer'));
+      expect(listaTareas[2]['titulo'], equals('Tarea Sin Fecha'));
+    });
+  });
+
+  group('Pruebas de Funciones de Consulta de Solo Lectura', () {
     test('ejecutarTareasPorEstado filtra por columna, reporta total/mostradas y limita a máximo 20 resultados', () {
-      // Crear 25 tareas pendientes
       final List<Tarea> tareas25 = List.generate(25, (index) {
         return Tarea(
           id: 'tarea_$index',
@@ -86,7 +246,7 @@ void main() {
           estadoNombre: 'Pendiente',
           tableroId: 'tablero_1',
           fechaCreacion: fechaReferencia,
-          prioridad: 3, // alta
+          prioridad: 3,
           asignadosA: const ['user_dev1'],
         );
       });
@@ -97,14 +257,12 @@ void main() {
         estado: 'Pendiente',
       );
 
-      // Debe informar total: 25, mostradas: 20 y recortar la lista de tareas a 20
       expect(resultado['total'], equals(25));
       expect(resultado['mostradas'], equals(20));
 
       final tareas = resultado['tareas'] as List<Map<String, dynamic>>;
       expect(tareas.length, equals(20));
 
-      // Verificar que los campos mapeados son exactamente los permitidos
       final primera = tareas.first;
       expect(primera['id'], equals('tarea_0'));
       expect(primera['titulo'], equals('Tarea Pendiente 0'));
@@ -266,7 +424,6 @@ void main() {
         ),
       ];
 
-      // Verificar que 'Pendiente' y 'Por Hacer' caen en la columna 'Por Hacer'
       final resEstado = AsistenteIaService.ejecutarTareasPorEstado(
         tareas: tareas,
         miembrosNombres: miembrosMap,
@@ -276,7 +433,6 @@ void main() {
 
       expect(resEstado['total'], equals(2));
 
-      // Verificar resumen del tablero
       final resResumen = AsistenteIaService.ejecutarResumenDelTablero(
         tareas: tareas,
         columnasTablero: columnasPersonalizadas,
@@ -288,7 +444,6 @@ void main() {
       expect(porEstado['Haciendo'], equals(0));
       expect(porEstado['Hecho'], equals(1));
 
-      // Verificar que la tarea vencida pero con estado 'Hecho' NO aparece como vencida
       final resVencidas = AsistenteIaService.ejecutarTareasVencidas(
         tareas: tareas,
         miembrosNombres: miembrosMap,
@@ -400,7 +555,7 @@ void main() {
       // 1. Longitud máxima de 10 mensajes (5 parejas completas)
       expect(historialEnviado.length, equals(10));
 
-      // 2. Empieza estrictamente con rol usuario
+      // 2. Empieza strictly con rol usuario
       expect(historialEnviado.first.rol, equals(RolMensaje.usuario));
 
       // 3. Alterna usuario/asistente
