@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -97,6 +98,9 @@ class AsistenteIaChatController extends ChangeNotifier {
     required Tablero tablero,
     required List<Tarea> tareasTablero,
     required Map<String, String> miembrosNombres,
+    String? usuarioUid,
+    String? usuarioNombre,
+    String? usuarioRol,
     DateTime? fechaActual,
   }) async {
     final textoLimpio = texto.trim();
@@ -109,6 +113,31 @@ class AsistenteIaChatController extends ChangeNotifier {
     _errorMessage = null;
     _isLoading = true;
     _mensajeCarga = 'Consultando información con IA...';
+
+    // Determinar identidad del usuario actual
+    String? currentUid;
+    try {
+      currentUid = FirebaseAuth.instance.currentUser?.uid;
+    } catch (_) {}
+    final uidFinal = usuarioUid ?? currentUid ?? '';
+
+    String? currentDisplayName;
+    try {
+      currentDisplayName = FirebaseAuth.instance.currentUser?.displayName;
+    } catch (_) {}
+    final nombreFinal = usuarioNombre ??
+        (uidFinal.isNotEmpty && miembrosNombres.containsKey(uidFinal)
+            ? miembrosNombres[uidFinal]!
+            : currentDisplayName ?? 'Usuario');
+
+    final rolFinal = usuarioRol ??
+        (uidFinal.isNotEmpty
+            ? (tablero.esCreador(uidFinal)
+                ? 'creador'
+                : (tablero.esAdminOCreador(uidFinal)
+                    ? 'administrador'
+                    : 'miembro'))
+            : 'miembro');
 
     // Construir el historial sanitizado a enviar antes de registrar el nuevo mensaje
     final historialParaEnviar = construirHistorialEnviar(_historial);
@@ -134,6 +163,9 @@ class AsistenteIaChatController extends ChangeNotifier {
         tareasTablero: tareasTablero,
         miembrosNombres: miembrosNombres,
         fechaActual: fechaActual ?? DateTime.now(),
+        usuarioUid: uidFinal,
+        usuarioNombre: nombreFinal,
+        usuarioRol: rolFinal,
         onReintento: (intento, intentosMaximos) {
           _mensajeCarga =
               'El servicio está ocupado, reintentando ($intento/$intentosMaximos)...';
@@ -141,12 +173,15 @@ class AsistenteIaChatController extends ChangeNotifier {
         },
       );
 
+      final textoLimpioRespuesta =
+          AsistenteIaService.limpiarMarkdownRespuesta(respuestaIa);
+
       // 2. Registrar respuesta de la IA en el historial
       final idAiMsg = 'ai_${DateTime.now().millisecondsSinceEpoch}';
       final msgAi = ChatMensaje(
         id: idAiMsg,
         rol: RolMensaje.asistente,
-        texto: respuestaIa,
+        texto: textoLimpioRespuesta,
         fecha: DateTime.now(),
       );
 

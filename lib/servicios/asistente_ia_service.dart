@@ -29,6 +29,9 @@ abstract class IAsistenteIaChatService {
     required List<Tarea> tareasTablero,
     required Map<String, String> miembrosNombres,
     required DateTime fechaActual,
+    String? usuarioUid,
+    String? usuarioNombre,
+    String? usuarioRol,
     void Function(int intento, int intentosMaximos)? onReintento,
   });
 }
@@ -352,6 +355,9 @@ Reglas de extracción estrictas:
     required List<Tarea> tareasTablero,
     required Map<String, String> miembrosNombres,
     required DateTime fechaActual,
+    String? usuarioUid,
+    String? usuarioNombre,
+    String? usuarioRol,
     void Function(int intento, int intentosMaximos)? onReintento,
   }) async {
     final cronometroTotal = Stopwatch()..start();
@@ -361,6 +367,24 @@ Reglas de extracción estrictas:
         return 'Por favor escribe o dicta un mensaje para consultar el tablero.';
       }
 
+      final uidFinal = (usuarioUid != null && usuarioUid.isNotEmpty)
+          ? usuarioUid
+          : '';
+      final nombreFinal = (usuarioNombre != null && usuarioNombre.isNotEmpty)
+          ? usuarioNombre
+          : (uidFinal.isNotEmpty && miembrosNombres.containsKey(uidFinal)
+              ? miembrosNombres[uidFinal]!
+              : 'Usuario');
+      final rolFinal = (usuarioRol != null && usuarioRol.isNotEmpty)
+          ? usuarioRol
+          : (uidFinal.isNotEmpty
+              ? (tablero.esCreador(uidFinal)
+                  ? 'creador'
+                  : (tablero.esAdminOCreador(uidFinal)
+                      ? 'administrador'
+                      : 'miembro'))
+              : 'miembro');
+
       final isoOffsetStr = _formatearFechaIsoOffset(fechaActual);
 
       // 1. Construir contexto del tablero en formato JSON compacto
@@ -369,13 +393,16 @@ Reglas de extracción estrictas:
         tareasTablero: tareasTablero,
         miembrosNombres: miembrosNombres,
         fechaActual: fechaActual,
+        usuarioUid: uidFinal,
       );
       final contextoJson = jsonEncode(contextoMap);
 
-      // 2. System Prompt en español con restricciones de solo lectura
+      // 2. System Prompt en español con restricciones de solo lectura e identidad
       final promptSistema = '''
 Eres el Asistente IA de Kanbly de SOLO LECTURA sobre el tablero activo.
 Tu objetivo es responder las consultas del usuario utilizando EXCLUSIVAMENTE la información del contexto del tablero proporcionado a continuación.
+
+El usuario que te consulta es $nombreFinal (UID: $uidFinal), rol en este tablero: $rolFinal. Cuando diga 'mis tareas', 'a mi nombre', 'yo' o 'mío', se refiere a este usuario.
 
 Contexto del tablero activo:
 - Fecha y hora actual del usuario (con offset): $isoOffsetStr
@@ -391,6 +418,8 @@ Reglas de conducta estrictas:
 3. Si el contexto indica que no hay tareas o está vacío, dilo claramente al usuario. NUNCA inventes tareas, fechas, nombres ni estados.
 4. Si el usuario te pide crear, editar, reordenar, mover o eliminar tareas o tableros, infórmale amablemente que este chatbot es de SOLO LECTURA, y que para crear tareas por voz puede usar el botón del Asistente de Voz (Fase 1) o hacerlo directamente desde el tablero.
 5. Si un bloque o lista de tareas indica que `total` es mayor que `mostradas`, avisa explícitamente al usuario en tu respuesta indicando que solo le estás mostrando `mostradas` de un total de `total` tareas existentes.
+6. Si el usuario pregunta por algo de su cuenta que no esté en el contexto (como correo, contraseña, foto o configuración), responde que solo puedes consultar tareas y datos del tablero.
+7. Responde en TEXTO PLANO sin usar formato Markdown: sin asteriscos (* o **), sin #, sin negritas ni cursivas. Para listas de tareas, usa un guion "-" con una tarea por línea, con el formato "- Título (estado, prioridad, vence dd/mm hh:mm am/pm)".
 ''';
 
       // 3. Convertir historial de mensajes a objetos Content de firebase_ai (solo roles user y model)
@@ -420,7 +449,7 @@ Reglas de conducta estrictas:
         throw AsistenteIaException(MensajesAsistenteIa.respuestaInvalida);
       }
 
-      return responseText.trim();
+      return limpiarMarkdownRespuesta(responseText.trim());
     } finally {
       cronometroTotal.stop();
       debugPrint(
@@ -598,6 +627,45 @@ Reglas de conducta estrictas:
     };
   }
 
+  static Map<String, dynamic> ejecutarMisTareas({
+    required List<Tarea> tareas,
+    required Map<String, String> miembrosNombres,
+    required String usuarioUid,
+  }) {
+    if (usuarioUid.isEmpty) {
+      return {
+        'total': 0,
+        'mostradas': 0,
+        'tareas': [],
+      };
+    }
+    final filtradas = tareas.where((t) {
+      if (t.archivada) return false;
+      return t.asignadosA.contains(usuarioUid);
+    }).toList();
+
+    final total = filtradas.length;
+    final mostradasList = filtradas
+        .take(100)
+        .map((t) => _mapearTareaParaIa(t, miembrosNombres))
+        .toList();
+
+    return {
+      'total': total,
+      'mostradas': mostradasList.length,
+      'tareas': mostradasList,
+    };
+  }
+
+  /// Red de seguridad para limpiar asteriscos (** y *) y símbolos # de la respuesta
+  /// antes de mostrarla, conservando los guiones de lista ("- ").
+  static String limpiarMarkdownRespuesta(String texto) {
+    return texto
+        .replaceAll('**', '')
+        .replaceAll('*', '')
+        .replaceAll('#', '');
+  }
+
   static Map<String, dynamic> _mapearTareaParaIa(
     Tarea tarea,
     Map<String, String> miembrosNombres,
@@ -769,6 +837,7 @@ Reglas de conducta estrictas:
     required List<Tarea> tareasTablero,
     required Map<String, String> miembrosNombres,
     required DateTime fechaActual,
+    String? usuarioUid,
   }) {
     final resumen = ejecutarResumenDelTablero(
       tareas: tareasTablero,
@@ -787,6 +856,12 @@ Reglas de conducta estrictas:
       miembrosNombres: miembrosNombres,
       fechaActual: fechaActual,
       dias: 7,
+    );
+
+    final misTareas = ejecutarMisTareas(
+      tareas: tareasTablero,
+      miembrosNombres: miembrosNombres,
+      usuarioUid: usuarioUid ?? '',
     );
 
     final limite7Dias = fechaActual.add(const Duration(days: 7));
@@ -851,6 +926,7 @@ Reglas de conducta estrictas:
       'resumen': resumen,
       'tareasVencidas': vencidas,
       'tareasPorVencer': porVencer,
+      'misTareas': misTareas,
       'listaTareas': {
         'total': totalNoArchivadas,
         'mostradas': mostradas.length,

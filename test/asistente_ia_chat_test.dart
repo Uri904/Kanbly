@@ -11,6 +11,9 @@ class FakeAsistenteIaChatService implements IAsistenteIaChatService {
   bool throwError;
   String? ultimoMensajeRecibido;
   List<ChatMensaje>? ultimoHistorialRecibido;
+  String? ultimoUsuarioUidRecibido;
+  String? ultimoUsuarioNombreRecibido;
+  String? ultimoUsuarioRolRecibido;
 
   FakeAsistenteIaChatService({
     this.respuestaSimulada = 'Respuesta simulada del asistente de IA.',
@@ -25,10 +28,16 @@ class FakeAsistenteIaChatService implements IAsistenteIaChatService {
     required List<Tarea> tareasTablero,
     required Map<String, String> miembrosNombres,
     required DateTime fechaActual,
+    String? usuarioUid,
+    String? usuarioNombre,
+    String? usuarioRol,
     void Function(int intento, int intentosMaximos)? onReintento,
   }) async {
     ultimoMensajeRecibido = mensajeUsuario;
     ultimoHistorialRecibido = historial;
+    ultimoUsuarioUidRecibido = usuarioUid;
+    ultimoUsuarioNombreRecibido = usuarioNombre;
+    ultimoUsuarioRolRecibido = usuarioRol;
     if (throwError) {
       throw AsistenteIaException(MensajesAsistenteIa.servicioOcupado);
     }
@@ -50,6 +59,9 @@ class FakeAsistenteIaChatServiceConCausa implements IAsistenteIaChatService {
     required List<Tarea> tareasTablero,
     required Map<String, String> miembrosNombres,
     required DateTime fechaActual,
+    String? usuarioUid,
+    String? usuarioNombre,
+    String? usuarioRol,
     void Function(int intento, int intentosMaximos)? onReintento,
   }) async {
     throw AsistenteIaException('El servicio está ocupado', causa: causaError);
@@ -661,6 +673,199 @@ void main() {
       expect(creadorPuedeVer, isTrue);
       expect(miembroPuedeVer, isTrue);
       expect(ajenoPuedeVer, isFalse);
+    });
+  });
+
+  group('Pruebas de Mejoras de Fase 2 (Identidad, Formato Texto Plano y misTareas)', () {
+    test('ejecutarMisTareas filtra únicamente las tareas asignadas al UID especificado y respeta el tope de 100', () {
+      final tareas = [
+        Tarea(
+          id: 't1',
+          titulo: 'Tarea de Uriel Creador',
+          estado: EstadoTarea.pendiente,
+          estadoNombre: 'Pendiente',
+          tableroId: 'tablero_1',
+          fechaCreacion: fechaReferencia,
+          asignadosA: const ['user_creador'],
+        ),
+        Tarea(
+          id: 't2',
+          titulo: 'Tarea Compartida',
+          estado: EstadoTarea.enProgreso,
+          estadoNombre: 'En progreso',
+          tableroId: 'tablero_1',
+          fechaCreacion: fechaReferencia,
+          asignadosA: const ['user_creador', 'user_dev1'],
+        ),
+        Tarea(
+          id: 't3',
+          titulo: 'Tarea de Carlos Dev',
+          estado: EstadoTarea.pendiente,
+          estadoNombre: 'Pendiente',
+          tableroId: 'tablero_1',
+          fechaCreacion: fechaReferencia,
+          asignadosA: const ['user_dev1'],
+        ),
+      ];
+
+      final misTareasCreador = AsistenteIaService.ejecutarMisTareas(
+        tareas: tareas,
+        miembrosNombres: miembrosMap,
+        usuarioUid: 'user_creador',
+      );
+
+      expect(misTareasCreador['total'], equals(2));
+      expect(misTareasCreador['mostradas'], equals(2));
+      final listaMisTareas = misTareasCreador['tareas'] as List<dynamic>;
+      expect(listaMisTareas.length, equals(2));
+      expect(listaMisTareas[0]['titulo'], equals('Tarea de Uriel Creador'));
+      expect(listaMisTareas[1]['titulo'], equals('Tarea Compartida'));
+
+      final misTareasCarlos = AsistenteIaService.ejecutarMisTareas(
+        tareas: tareas,
+        miembrosNombres: miembrosMap,
+        usuarioUid: 'user_dev1',
+      );
+
+      expect(misTareasCarlos['total'], equals(2));
+
+      final misTareasInexistente = AsistenteIaService.ejecutarMisTareas(
+        tareas: tareas,
+        miembrosNombres: miembrosMap,
+        usuarioUid: 'user_desconocido',
+      );
+
+      expect(misTareasInexistente['total'], equals(0));
+      expect(misTareasInexistente['mostradas'], equals(0));
+    });
+
+    test('construirContextoTablero incluye el bloque misTareas filtrado por UID', () {
+      final tareas = [
+        Tarea(
+          id: 't1',
+          titulo: 'Tarea Asignada a Carlos',
+          estado: EstadoTarea.pendiente,
+          estadoNombre: 'Pendiente',
+          tableroId: 'tablero_1',
+          fechaCreacion: fechaReferencia,
+          asignadosA: const ['user_dev1'],
+        ),
+      ];
+
+      final contexto = AsistenteIaService.construirContextoTablero(
+        tablero: tableroPrueba,
+        tareasTablero: tareas,
+        miembrosNombres: miembrosMap,
+        fechaActual: fechaReferencia,
+        usuarioUid: 'user_dev1',
+      );
+
+      expect(contexto.containsKey('misTareas'), isTrue);
+      final misTareasMap = contexto['misTareas'] as Map<String, dynamic>;
+      expect(misTareasMap['total'], equals(1));
+      expect(misTareasMap['mostradas'], equals(1));
+      final tareasList = misTareasMap['tareas'] as List<dynamic>;
+      expect(tareasList.first['titulo'], equals('Tarea Asignada a Carlos'));
+    });
+
+    test('limpiarMarkdownRespuesta quita ** y * y # pero conserva "- "', () {
+      const respuestaRaw = '''
+**Resumen de mis tareas:**
+# Tareas pendientes
+- **Tarea 1** (*Pendiente*, prioridad alta, vence 25/10 03:00 pm)
+- Tarea 2 (En progreso, prioridad media)
+''';
+
+      final limpia = AsistenteIaService.limpiarMarkdownRespuesta(respuestaRaw);
+
+      expect(limpia.contains('**'), isFalse);
+      expect(limpia.contains('*'), isFalse);
+      expect(limpia.contains('#'), isFalse);
+      expect(limpia.contains('- Tarea 1 (Pendiente, prioridad alta, vence 25/10 03:00 pm)'), isTrue);
+      expect(limpia.contains('- Tarea 2 (En progreso, prioridad media)'), isTrue);
+    });
+
+    test('enviarMensajeChat incluye nombre, uid y rol en el system prompt y la instrucción de consultas de cuenta', () async {
+      SolicitudIa? solicitudCapturada;
+
+      final servicioPrueba = AsistenteIaService(
+        generarContenido: (solicitud) async {
+          solicitudCapturada = solicitud;
+          return '- Tarea de prueba (Pendiente, media, vence 20/10 10:00 am)';
+        },
+      );
+
+      await servicioPrueba.enviarMensajeChat(
+        mensajeUsuario: '¿Cuáles son mis tareas?',
+        historial: [],
+        tablero: tableroPrueba,
+        tareasTablero: [],
+        miembrosNombres: miembrosMap,
+        fechaActual: fechaReferencia,
+        usuarioUid: 'user_creador',
+        usuarioNombre: 'Uriel Admin',
+        usuarioRol: 'creador',
+      );
+
+      expect(solicitudCapturada, isNotNull);
+      final prompt = solicitudCapturada!.instruccionSistema;
+
+      expect(
+        prompt,
+        contains(
+          "El usuario que te consulta es Uriel Admin (UID: user_creador), rol en este tablero: creador.",
+        ),
+      );
+      expect(
+        prompt,
+        contains(
+          "Cuando diga 'mis tareas', 'a mi nombre', 'yo' o 'mío', se refiere a este usuario.",
+        ),
+      );
+      expect(
+        prompt,
+        contains("misTareas"),
+      );
+      expect(
+        prompt,
+        contains(
+          "Si el usuario pregunta por algo de su cuenta que no esté en el contexto (como correo, contraseña, foto o configuración), responde que solo puedes consultar tareas y datos del tablero.",
+        ),
+      );
+      expect(
+        prompt,
+        contains(
+          'Responde en TEXTO PLANO sin usar formato Markdown: sin asteriscos (* o **), sin #, sin negritas ni cursivas. Para listas de tareas, usa un guion "-" con una tarea por línea, con el formato "- Título (estado, prioridad, vence dd/mm hh:mm am/pm)".',
+        ),
+      );
+    });
+
+    test('Controller pasa usuarioUid, usuarioNombre y usuarioRol a enviarMensajeChat y limpia la respuesta', () async {
+      final fakeService = FakeAsistenteIaChatService(
+        respuestaSimulada: '**Tus tareas:**\n- *Tarea 1* (Pendiente, alta)',
+      );
+      final controller = AsistenteIaChatController(chatService: fakeService);
+
+      final ok = await controller.enviarMensaje(
+        texto: 'mis tareas',
+        tablero: tableroPrueba,
+        tareasTablero: const [],
+        miembrosNombres: miembrosMap,
+        usuarioUid: 'user_dev1',
+        usuarioNombre: 'Carlos Programador',
+        usuarioRol: 'miembro',
+        fechaActual: fechaReferencia,
+      );
+
+      expect(ok, isTrue);
+      expect(fakeService.ultimoUsuarioUidRecibido, equals('user_dev1'));
+      expect(fakeService.ultimoUsuarioNombreRecibido, equals('Carlos Programador'));
+      expect(fakeService.ultimoUsuarioRolRecibido, equals('miembro'));
+
+      final respuestaEnHistorial = controller.historial.last.texto;
+      expect(respuestaEnHistorial.contains('**'), isFalse);
+      expect(respuestaEnHistorial.contains('*'), isFalse);
+      expect(respuestaEnHistorial, contains('- Tarea 1 (Pendiente, alta)'));
     });
   });
 }
