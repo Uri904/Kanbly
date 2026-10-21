@@ -59,6 +59,38 @@ class AsistenteIaChatController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Construye el historial sanitizado y recortado para enviar al servicio de IA.
+  ///
+  /// Excluye el mensaje actual del usuario y mensajes de error ([ChatMensaje.esError]).
+  /// Mantiene solo parejas completas (usuario, asistente) ordenadas alternadamente,
+  /// recortando a los últimos 10 mensajes (máximo 5 parejas).
+  static List<ChatMensaje> construirHistorialEnviar(
+    List<ChatMensaje> historialCompleto, {
+    String? idMensajeActual,
+  }) {
+    final sinErroresNiActual = historialCompleto.where((m) {
+      if (m.esError) return false;
+      if (idMensajeActual != null && m.id == idMensajeActual) return false;
+      return true;
+    }).toList();
+
+    final List<List<ChatMensaje>> parejas = [];
+    for (int i = 0; i < sinErroresNiActual.length - 1; i++) {
+      final m1 = sinErroresNiActual[i];
+      final m2 = sinErroresNiActual[i + 1];
+      if (m1.rol == RolMensaje.usuario && m2.rol == RolMensaje.asistente) {
+        parejas.add([m1, m2]);
+        i++; // Saltar m2 porque ya forma pareja con m1
+      }
+    }
+
+    final parejasRecortadas = parejas.length > 5
+        ? parejas.sublist(parejas.length - 5)
+        : parejas;
+
+    return parejasRecortadas.expand((p) => p).toList();
+  }
+
   /// Envía un mensaje del usuario al servicio de IA y registra la respuesta.
   Future<bool> enviarMensaje({
     required String texto,
@@ -78,7 +110,10 @@ class AsistenteIaChatController extends ChangeNotifier {
     _isLoading = true;
     _mensajeCarga = 'Consultando información con IA...';
 
-    // 1. Registrar mensaje del usuario en el historial
+    // Construir el historial sanitizado a enviar antes de registrar el nuevo mensaje
+    final historialParaEnviar = construirHistorialEnviar(_historial);
+
+    // 1. Registrar mensaje del usuario en el historial para la UI
     final idUsuarioMsg = 'user_${DateTime.now().millisecondsSinceEpoch}';
     final msgUsuario = ChatMensaje(
       id: idUsuarioMsg,
@@ -94,7 +129,7 @@ class AsistenteIaChatController extends ChangeNotifier {
     try {
       final respuestaIa = await _chatService.enviarMensajeChat(
         mensajeUsuario: textoLimpio,
-        historial: _historial,
+        historial: historialParaEnviar,
         tablero: tablero,
         tareasTablero: tareasTablero,
         miembrosNombres: miembrosNombres,

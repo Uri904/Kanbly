@@ -7,6 +7,7 @@ import '../modelo/tarea_borrador.dart';
 import '../modelo/tarea.dart';
 import '../modelo/tablero.dart';
 import '../modelo/chat_mensaje.dart';
+import '../utilerias/kanban_utils.dart';
 
 /// Interfaz abstracta para el servicio de Asistente con IA (Dictado por Voz).
 abstract class IAsistenteIaService {
@@ -264,7 +265,7 @@ Contexto proporcionado:
 - Columnas permitidas en el tablero: ${columnasLote.join(', ')}
 - Integrantes disponibles (UID y Nombre): ${miembros.map((m) => '${m['uid']}: ${m['nombre']}').join(', ')}
 
-Reglas de extracción strictly:
+Reglas de extracción estrictas:
 1. "titulo": Extrae el título principal de la tarea. Es un campo obligatorio.
 2. "descripcion": Detalle explicativo de la tarea si fue dictado. Si no se menciona, debe ser null.
 3. "prioridad": Selecciona una de las opciones ["alta", "media", "baja"] si el usuario la menciona o la sugiere claramente. Si no queda clara o no la menciona, asigna null.
@@ -374,13 +375,12 @@ Reglas de extracción strictly:
         },
         callable: (args) async {
           final estadoArg = args['estado']?.toString() ?? '';
-          return {
-            'resultado': ejecutarTareasPorEstado(
-              tareas: tareasTablero,
-              miembrosNombres: miembrosNombres,
-              estado: estadoArg,
-            ),
-          };
+          return ejecutarTareasPorEstado(
+            tareas: tareasTablero,
+            miembrosNombres: miembrosNombres,
+            estado: estadoArg,
+            columnasTablero: tablero.columnas,
+          );
         },
       );
 
@@ -395,13 +395,11 @@ Reglas de extracción strictly:
         },
         callable: (args) async {
           final integranteArg = args['integrante']?.toString() ?? '';
-          return {
-            'resultado': ejecutarTareasDeIntegrante(
-              tareas: tareasTablero,
-              miembrosNombres: miembrosNombres,
-              integrante: integranteArg,
-            ),
-          };
+          return ejecutarTareasDeIntegrante(
+            tareas: tareasTablero,
+            miembrosNombres: miembrosNombres,
+            integrante: integranteArg,
+          );
         },
       );
 
@@ -421,14 +419,12 @@ Reglas de extracción strictly:
           if (diasVal is num) dias = diasVal.toInt();
           if (diasVal is String) dias = int.tryParse(diasVal) ?? 7;
 
-          return {
-            'resultado': ejecutarTareasPorVencer(
-              tareas: tareasTablero,
-              miembrosNombres: miembrosNombres,
-              fechaActual: fechaActual,
-              dias: dias,
-            ),
-          };
+          return ejecutarTareasPorVencer(
+            tareas: tareasTablero,
+            miembrosNombres: miembrosNombres,
+            fechaActual: fechaActual,
+            dias: dias,
+          );
         },
       );
 
@@ -438,13 +434,12 @@ Reglas de extracción strictly:
             'Obtiene las tareas cuya fecha de vencimiento ya pasó y aún no han sido completadas.',
         parameters: const {},
         callable: (args) async {
-          return {
-            'resultado': ejecutarTareasVencidas(
-              tareas: tareasTablero,
-              miembrosNombres: miembrosNombres,
-              fechaActual: fechaActual,
-            ),
-          };
+          return ejecutarTareasVencidas(
+            tareas: tareasTablero,
+            miembrosNombres: miembrosNombres,
+            fechaActual: fechaActual,
+            columnasTablero: tablero.columnas,
+          );
         },
       );
 
@@ -488,6 +483,7 @@ Reglas de conducta estrictas:
 3. Si una función devuelve una lista vacía o indica que no hay tareas, dilo claramente al usuario. NUNCA inventes tareas, fechas, nombres ni estados.
 4. Si el usuario te pide crear, editar, reordenar, mover o eliminar tareas o tableros, infórmale amablemente que este chatbot es de SOLO LECTURA, y que para crear tareas por voz puede usar el botón del Asistente de Voz (Fase 1) o hacerlo directamente desde el tablero.
 5. Utiliza de forma proactiva la función de consulta más adecuada (`tareasPorEstado`, `tareasDeIntegrante`, `tareasPorVencer`, `tareasVencidas` o `resumenDelTablero`) para obtener los datos precisos antes de responder.
+6. Si una función de consulta indica que `total` es mayor que `mostradas`, avisa explícitamente al usuario en tu respuesta indicando que solo le estás mostrando `mostradas` de un total de `total` tareas existentes.
 ''';
 
       // 3. Convertir historial de mensajes a objetos Content de firebase_ai
@@ -531,23 +527,72 @@ Reglas de conducta estrictas:
   // FUNCIONES ESTÁTICAS DE CONSULTA (100% TESTEABLES EN PRUEBAS UNITARIAS)
   // ===========================================================================
 
-  static List<Map<String, dynamic>> ejecutarTareasPorEstado({
+  static Map<String, dynamic> ejecutarTareasPorEstado({
     required List<Tarea> tareas,
     required Map<String, String> miembrosNombres,
     required String estado,
+    List<String> columnasTablero = const ['Pendiente', 'En progreso', 'Completada'],
   }) {
+    final columnas = columnasTablero.isNotEmpty
+        ? columnasTablero
+        : const ['Pendiente', 'En progreso', 'Completada'];
+
+    int targetIndex = -1;
+    String targetCol = estado.trim();
+
     final estadoLimpio = estado.trim().toLowerCase();
+    for (int i = 0; i < columnas.length; i++) {
+      final col = columnas[i];
+      final colLimpio = col.trim().toLowerCase();
+      if (colLimpio == estadoLimpio) {
+        targetIndex = i;
+        targetCol = col;
+        break;
+      }
+      final esPorHacer = (colLimpio == 'pendiente' || colLimpio == 'por hacer');
+      final reqEsPorHacer = (estadoLimpio == 'pendiente' || estadoLimpio == 'por hacer');
+      if (esPorHacer && reqEsPorHacer) {
+        targetIndex = i;
+        targetCol = col;
+        break;
+      }
+
+      final esEnProgreso = (colLimpio == 'en progreso' || colLimpio == 'en proceso' || colLimpio == 'haciendo');
+      final reqEsEnProgreso = (estadoLimpio == 'en progreso' || estadoLimpio == 'en proceso' || estadoLimpio == 'haciendo');
+      if (esEnProgreso && reqEsEnProgreso) {
+        targetIndex = i;
+        targetCol = col;
+        break;
+      }
+
+      final esCompletada = (colLimpio == 'completada' || colLimpio == 'completado' || colLimpio == 'terminada' || colLimpio == 'hecho');
+      final reqEsCompletada = (estadoLimpio == 'completada' || estadoLimpio == 'completado' || estadoLimpio == 'terminada' || estadoLimpio == 'hecho');
+      if (esCompletada && reqEsCompletada) {
+        targetIndex = i;
+        targetCol = col;
+        break;
+      }
+    }
+
     final filtradas = tareas.where((t) {
       if (t.archivada) return false;
-      final estadoNombre = t.estadoNombre.toLowerCase();
-      final estadoValue = t.estado.value.toLowerCase();
-      return estadoNombre == estadoLimpio || estadoValue == estadoLimpio;
-    }).take(20).toList();
+      if (targetIndex != -1) {
+        return KanbanUtils.correspondeAColumna(t, targetCol, columnas, targetIndex);
+      }
+      return KanbanUtils.correspondeAColumna(t, targetCol, columnas, 0);
+    }).toList();
 
-    return filtradas.map((t) => _mapearTareaParaIa(t, miembrosNombres)).toList();
+    final total = filtradas.length;
+    final mostradasList = filtradas.take(20).map((t) => _mapearTareaParaIa(t, miembrosNombres)).toList();
+
+    return {
+      'total': total,
+      'mostradas': mostradasList.length,
+      'tareas': mostradasList,
+    };
   }
 
-  static List<Map<String, dynamic>> ejecutarTareasDeIntegrante({
+  static Map<String, dynamic> ejecutarTareasDeIntegrante({
     required List<Tarea> tareas,
     required Map<String, String> miembrosNombres,
     required String integrante,
@@ -560,12 +605,19 @@ Reglas de conducta estrictas:
         final nombre = miembrosNombres[uid]?.toLowerCase() ?? '';
         return nombre.contains(integranteLimpio);
       });
-    }).take(20).toList();
+    }).toList();
 
-    return filtradas.map((t) => _mapearTareaParaIa(t, miembrosNombres)).toList();
+    final total = filtradas.length;
+    final mostradasList = filtradas.take(20).map((t) => _mapearTareaParaIa(t, miembrosNombres)).toList();
+
+    return {
+      'total': total,
+      'mostradas': mostradasList.length,
+      'tareas': mostradasList,
+    };
   }
 
-  static List<Map<String, dynamic>> ejecutarTareasPorVencer({
+  static Map<String, dynamic> ejecutarTareasPorVencer({
     required List<Tarea> tareas,
     required Map<String, String> miembrosNombres,
     required DateTime fechaActual,
@@ -578,24 +630,39 @@ Reglas de conducta estrictas:
       return t.fechaVencimiento!.isAfter(fechaActual) &&
           (t.fechaVencimiento!.isBefore(limiteFuturo) ||
               t.fechaVencimiento!.isAtSameMomentAs(limiteFuturo));
-    }).take(20).toList();
+    }).toList();
 
-    return filtradas.map((t) => _mapearTareaParaIa(t, miembrosNombres)).toList();
+    final total = filtradas.length;
+    final mostradasList = filtradas.take(20).map((t) => _mapearTareaParaIa(t, miembrosNombres)).toList();
+
+    return {
+      'total': total,
+      'mostradas': mostradasList.length,
+      'tareas': mostradasList,
+    };
   }
 
-  static List<Map<String, dynamic>> ejecutarTareasVencidas({
+  static Map<String, dynamic> ejecutarTareasVencidas({
     required List<Tarea> tareas,
     required Map<String, String> miembrosNombres,
     required DateTime fechaActual,
+    List<String> columnasTablero = const ['Pendiente', 'En progreso', 'Completada'],
   }) {
     final filtradas = tareas.where((t) {
       if (t.archivada) return false;
       if (t.fechaVencimiento == null) return false;
-      if (t.estado == EstadoTarea.completada) return false;
+      if (KanbanUtils.esTareaCompletada(t, columnasTablero)) return false;
       return t.fechaVencimiento!.isBefore(fechaActual);
-    }).take(20).toList();
+    }).toList();
 
-    return filtradas.map((t) => _mapearTareaParaIa(t, miembrosNombres)).toList();
+    final total = filtradas.length;
+    final mostradasList = filtradas.take(20).map((t) => _mapearTareaParaIa(t, miembrosNombres)).toList();
+
+    return {
+      'total': total,
+      'mostradas': mostradasList.length,
+      'tareas': mostradasList,
+    };
   }
 
   static Map<String, dynamic> ejecutarResumenDelTablero({
@@ -610,8 +677,13 @@ Reglas de conducta estrictas:
     for (final t in tareas) {
       if (t.archivada) continue;
       total++;
-      final estadoStr = t.estadoNombre;
-      conteoPorColumna[estadoStr] = (conteoPorColumna[estadoStr] ?? 0) + 1;
+      for (int i = 0; i < columnasTablero.length; i++) {
+        final colNombre = columnasTablero[i];
+        if (KanbanUtils.correspondeAColumna(t, colNombre, columnasTablero, i)) {
+          conteoPorColumna[colNombre] = (conteoPorColumna[colNombre] ?? 0) + 1;
+          break;
+        }
+      }
     }
 
     return {

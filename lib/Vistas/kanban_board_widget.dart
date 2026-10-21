@@ -18,6 +18,7 @@ import '../modelo/tablero.dart';
 import '../modelo/tarea.dart';
 import '../servicios/firestore_service.dart';
 import '../utilerias/formato_util.dart';
+import '../utilerias/kanban_utils.dart';
 import 'calendario_tablero.dart';
 import 'recordatorios.dart';
 // ==========================================
@@ -299,7 +300,7 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
 
                             // BÚSQUEDA ROBUSTA Y GARANTÍA CERO PÉRDIDA DE TAREAS
                             final tareasColumna = todasLasTareas.where((t) {
-                              return _correspondeAColumna(t, colNombre, columnasList, index);
+                              return KanbanUtils.correspondeAColumna(t, colNombre, columnasList, index);
                             }).toList();
 
                             final colorHeader = paletaColoresHeaders[index % paletaColoresHeaders.length];
@@ -327,64 +328,6 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
         );
       },
     );
-  }
-
-  // --- COMPROBACIÓN FLEXIBLE DE PERTENENCIA DE TAREA A COLUMNA ---
-  bool _correspondeAColumna(
-    Tarea tarea,
-    String colNombre,
-    List<String> todasLasColumnas,
-    int colIndex,
-  ) {
-    final colClean = colNombre.trim().toLowerCase();
-    final estadoNombreClean = tarea.estadoNombre.trim().toLowerCase();
-    final estadoValueClean = tarea.estado.value.trim().toLowerCase();
-
-    // 1. Coincidencia directa ignorando mayúsculas/minúsculas y espacios
-    if (estadoNombreClean == colClean || estadoValueClean == colClean) {
-      return true;
-    }
-
-    // 2. Mapeo de sinónimos habituales
-    final esPorHacer = (colClean == 'pendiente' || colClean == 'por hacer');
-    final tareaEsPorHacer = (estadoNombreClean == 'pendiente' || estadoNombreClean == 'por hacer');
-    if (esPorHacer && tareaEsPorHacer) return true;
-
-    final esEnProgreso = (colClean == 'en progreso' || colClean == 'en proceso' || colClean == 'haciendo');
-    final tareaEsEnProgreso = (estadoNombreClean == 'en progreso' || estadoNombreClean == 'en proceso' || estadoNombreClean == 'haciendo');
-    if (esEnProgreso && tareaEsEnProgreso) return true;
-
-    final esCompletada = (colClean == 'completada' || colClean == 'completado' || colClean == 'terminada' || colClean == 'hecho');
-    final tareaEsCompletada = (estadoNombreClean == 'completada' || estadoNombreClean == 'completado' || estadoNombreClean == 'terminada' || estadoNombreClean == 'hecho');
-    if (esCompletada && tareaEsCompletada) return true;
-
-    // 3. Garantía Cero Pérdidas: si no coincide con NINGUNA columna existente en el tablero, la colocamos en la primera columna
-    bool coincideConAlgunaOtra = false;
-    for (final otraCol in todasLasColumnas) {
-      final otraClean = otraCol.trim().toLowerCase();
-      if (estadoNombreClean == otraClean || estadoValueClean == otraClean) {
-        coincideConAlgunaOtra = true;
-        break;
-      }
-      if ((otraClean == 'pendiente' || otraClean == 'por hacer') && tareaEsPorHacer) {
-        coincideConAlgunaOtra = true;
-        break;
-      }
-      if ((otraClean == 'en progreso' || otraClean == 'en proceso' || otraClean == 'haciendo') && tareaEsEnProgreso) {
-        coincideConAlgunaOtra = true;
-        break;
-      }
-      if ((otraClean == 'completada' || otraClean == 'completado' || otraClean == 'terminada' || otraClean == 'hecho') && tareaEsCompletada) {
-        coincideConAlgunaOtra = true;
-        break;
-      }
-    }
-
-    if (!coincideConAlgunaOtra && colIndex == 0) {
-      return true;
-    }
-
-    return false;
   }
 
   // --- MÉTODOS AUXILIARES DE LA INTERFAZ ---
@@ -631,10 +574,20 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
     }
 
     // Cargar tareas del tablero activo
-    List<Tarea> tareas = [];
+    List<Tarea> tareas;
     try {
       tareas = await _firestoreService.obtenerTareasDeTablero(tableroActivo.id);
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error al cargar las tareas del tablero. Intenta de nuevo.'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+      return;
+    }
 
     // Cargar mapa de nombres de integrantes
     final Map<String, String> miembrosNombres = {};

@@ -10,6 +10,7 @@ class FakeAsistenteIaChatService implements IAsistenteIaChatService {
   String respuestaSimulada;
   bool throwError;
   String? ultimoMensajeRecibido;
+  List<ChatMensaje>? ultimoHistorialRecibido;
 
   FakeAsistenteIaChatService({
     this.respuestaSimulada = 'Respuesta simulada del asistente de IA.',
@@ -27,6 +28,7 @@ class FakeAsistenteIaChatService implements IAsistenteIaChatService {
     void Function(int intento, int intentosMaximos)? onReintento,
   }) async {
     ultimoMensajeRecibido = mensajeUsuario;
+    ultimoHistorialRecibido = historial;
     if (throwError) {
       throw AsistenteIaException(MensajesAsistenteIa.servicioOcupado);
     }
@@ -54,7 +56,7 @@ void main() {
   };
 
   group('Pruebas de Funciones de Consulta de Solo Lectura (Function Calling)', () {
-    test('ejecutarTareasPorEstado filtra por columna y limita a máximo 20 resultados', () {
+    test('ejecutarTareasPorEstado filtra por columna, reporta total/mostradas y limita a máximo 20 resultados', () {
       // Crear 25 tareas pendientes
       final List<Tarea> tareas25 = List.generate(25, (index) {
         return Tarea(
@@ -75,11 +77,15 @@ void main() {
         estado: 'Pendiente',
       );
 
-      // Debe limitar estrictamente a 20 resultados
-      expect(resultado.length, equals(20));
+      // Debe informar total: 25, mostradas: 20 y recortar la lista de tareas a 20
+      expect(resultado['total'], equals(25));
+      expect(resultado['mostradas'], equals(20));
 
-      // Verificar que los campos mapeados son exactamente los permitidos (sin comentarios ni adjuntos)
-      final primera = resultado.first;
+      final tareas = resultado['tareas'] as List<Map<String, dynamic>>;
+      expect(tareas.length, equals(20));
+
+      // Verificar que los campos mapeados son exactamente los permitidos
+      final primera = tareas.first;
       expect(primera['id'], equals('tarea_0'));
       expect(primera['titulo'], equals('Tarea Pendiente 0'));
       expect(primera['estado'], equals('Pendiente'));
@@ -107,25 +113,28 @@ void main() {
         ),
       ];
 
-      // Filtro por nombre parcial 'Carlos'
       final resultadoCarlos = AsistenteIaService.ejecutarTareasDeIntegrante(
         tareas: tareas,
         miembrosNombres: miembrosMap,
         integrante: 'carlos',
       );
 
-      expect(resultadoCarlos.length, equals(1));
-      expect(resultadoCarlos.first['id'], equals('t1'));
+      expect(resultadoCarlos['total'], equals(1));
+      expect(resultadoCarlos['mostradas'], equals(1));
+      final tareasCarlos = resultadoCarlos['tareas'] as List<Map<String, dynamic>>;
+      expect(tareasCarlos.length, equals(1));
+      expect(tareasCarlos.first['id'], equals('t1'));
 
-      // Filtro por UID exacto
       final resultadoUid = AsistenteIaService.ejecutarTareasDeIntegrante(
         tareas: tareas,
         miembrosNombres: miembrosMap,
         integrante: 'user_dev2',
       );
 
-      expect(resultadoUid.length, equals(1));
-      expect(resultadoUid.first['id'], equals('t2'));
+      expect(resultadoUid['total'], equals(1));
+      final tareasUid = resultadoUid['tareas'] as List<Map<String, dynamic>>;
+      expect(tareasUid.length, equals(1));
+      expect(tareasUid.first['id'], equals('t2'));
     });
 
     test('ejecutarTareasPorVencer identifica tareas próximas a vencer en N días', () {
@@ -153,8 +162,10 @@ void main() {
         dias: 7,
       );
 
-      expect(resultado.length, equals(1));
-      expect(resultado.first['id'], equals('t1'));
+      expect(resultado['total'], equals(1));
+      final tareasList = resultado['tareas'] as List<Map<String, dynamic>>;
+      expect(tareasList.length, equals(1));
+      expect(tareasList.first['id'], equals('t1'));
     });
 
     test('ejecutarTareasVencidas identifica tareas vencidas no completadas', () {
@@ -185,8 +196,10 @@ void main() {
         fechaActual: fechaReferencia,
       );
 
-      expect(resultado.length, equals(1));
-      expect(resultado.first['id'], equals('t_vencida_pendiente'));
+      expect(resultado['total'], equals(1));
+      final tareasList = resultado['tareas'] as List<Map<String, dynamic>>;
+      expect(tareasList.length, equals(1));
+      expect(tareasList.first['id'], equals('t_vencida_pendiente'));
     });
 
     test('ejecutarResumenDelTablero ante tablero sin tareas devuelve conteos en cero', () {
@@ -200,6 +213,70 @@ void main() {
       expect(porEstado['Pendiente'], equals(0));
       expect(porEstado['En progreso'], equals(0));
       expect(porEstado['Completada'], equals(0));
+    });
+
+    test('Los sinónimos de columna y conteo de completadas coinciden con la lógica del tablero', () {
+      final columnasPersonalizadas = ['Por Hacer', 'Haciendo', 'Hecho'];
+
+      final tareas = [
+        Tarea(
+          id: 't1',
+          titulo: 'Tarea Pendiente',
+          estado: EstadoTarea.pendiente,
+          estadoNombre: 'Pendiente',
+          tableroId: 'tablero_1',
+          fechaCreacion: fechaReferencia,
+        ),
+        Tarea(
+          id: 't2',
+          titulo: 'Tarea Por Hacer',
+          estado: EstadoTarea.pendiente,
+          estadoNombre: 'Por Hacer',
+          tableroId: 'tablero_1',
+          fechaCreacion: fechaReferencia,
+        ),
+        Tarea(
+          id: 't3',
+          titulo: 'Tarea Terminada',
+          estado: EstadoTarea.completada,
+          estadoNombre: 'Hecho',
+          tableroId: 'tablero_1',
+          fechaCreacion: fechaReferencia,
+          fechaVencimiento: fechaReferencia.subtract(const Duration(days: 1)),
+        ),
+      ];
+
+      // Verificar que 'Pendiente' y 'Por Hacer' caen en la columna 'Por Hacer'
+      final resEstado = AsistenteIaService.ejecutarTareasPorEstado(
+        tareas: tareas,
+        miembrosNombres: miembrosMap,
+        estado: 'Por Hacer',
+        columnasTablero: columnasPersonalizadas,
+      );
+
+      expect(resEstado['total'], equals(2));
+
+      // Verificar resumen del tablero
+      final resResumen = AsistenteIaService.ejecutarResumenDelTablero(
+        tareas: tareas,
+        columnasTablero: columnasPersonalizadas,
+      );
+
+      expect(resResumen['totalTareas'], equals(3));
+      final porEstado = Map<String, int>.from(resResumen['porEstado']);
+      expect(porEstado['Por Hacer'], equals(2));
+      expect(porEstado['Haciendo'], equals(0));
+      expect(porEstado['Hecho'], equals(1));
+
+      // Verificar que la tarea vencida pero con estado 'Hecho' NO aparece como vencida
+      final resVencidas = AsistenteIaService.ejecutarTareasVencidas(
+        tareas: tareas,
+        miembrosNombres: miembrosMap,
+        fechaActual: fechaReferencia,
+        columnasTablero: columnasPersonalizadas,
+      );
+
+      expect(resVencidas['total'], equals(0));
     });
   });
 
@@ -227,6 +304,95 @@ void main() {
       expect(controller.historial[1].texto, equals('Tienes 3 tareas pendientes en el tablero.'));
     });
 
+    test('El historial enviado a la IA no contiene el mensaje actual ni errores', () async {
+      final fakeService = FakeAsistenteIaChatService();
+      final controller = AsistenteIaChatController(chatService: fakeService);
+
+      // 1. Primer intercambio exitoso
+      await controller.enviarMensaje(
+        texto: 'Consulta 1',
+        tablero: tableroPrueba,
+        tareasTablero: const [],
+        miembrosNombres: miembrosMap,
+      );
+
+      // 2. Falla simulada para generar un mensaje con esError == true
+      fakeService.throwError = true;
+      await controller.enviarMensaje(
+        texto: 'Consulta con error',
+        tablero: tableroPrueba,
+        tareasTablero: const [],
+        miembrosNombres: miembrosMap,
+      );
+
+      // 3. Tercera consulta válida
+      fakeService.throwError = false;
+      const nuevaConsulta = 'Consulta 3 válida';
+      await controller.enviarMensaje(
+        texto: nuevaConsulta,
+        tablero: tableroPrueba,
+        tareasTablero: const [],
+        miembrosNombres: miembrosMap,
+      );
+
+      final historialEnviado = fakeService.ultimoHistorialRecibido;
+      expect(historialEnviado, isNotNull);
+
+      // NO contiene la consulta actual
+      final contieneActual = historialEnviado!.any((m) => m.texto == nuevaConsulta);
+      expect(contieneActual, isFalse);
+
+      // NO contiene mensajes de error
+      final contieneError = historialEnviado.any((m) => m.esError);
+      expect(contieneError, isFalse);
+
+      // Contiene solo el primer par válido (Consulta 1, Respuesta)
+      expect(historialEnviado.length, equals(2));
+      expect(historialEnviado[0].texto, equals('Consulta 1'));
+      expect(historialEnviado[0].rol, equals(RolMensaje.usuario));
+      expect(historialEnviado[1].rol, equals(RolMensaje.asistente));
+    });
+
+    test('El historial enviado se limita a máximo 10 mensajes y empieza con rol usuario tras 7 o más turnos', () async {
+      final fakeService = FakeAsistenteIaChatService();
+      final controller = AsistenteIaChatController(chatService: fakeService);
+
+      // Enviar 8 turnos completos (16 mensajes en total)
+      for (int i = 1; i <= 8; i++) {
+        await controller.enviarMensaje(
+          texto: 'Pregunta $i',
+          tablero: tableroPrueba,
+          tareasTablero: const [],
+          miembrosNombres: miembrosMap,
+        );
+      }
+
+      // Enviar el turno 9
+      await controller.enviarMensaje(
+        texto: 'Pregunta 9',
+        tablero: tableroPrueba,
+        tareasTablero: const [],
+        miembrosNombres: miembrosMap,
+      );
+
+      final historialEnviado = fakeService.ultimoHistorialRecibido!;
+
+      // 1. Longitud máxima de 10 mensajes (5 parejas completas)
+      expect(historialEnviado.length, equals(10));
+
+      // 2. Empieza estrictamente con rol usuario
+      expect(historialEnviado.first.rol, equals(RolMensaje.usuario));
+
+      // 3. Alterna usuario/asistente
+      for (int i = 0; i < historialEnviado.length; i++) {
+        final rolEsperado = i % 2 == 0 ? RolMensaje.usuario : RolMensaje.asistente;
+        expect(historialEnviado[i].rol, equals(rolEsperado));
+      }
+
+      // 4. NO contiene la pregunta actual
+      expect(historialEnviado.any((m) => m.texto == 'Pregunta 9'), isFalse);
+    });
+
     test('Limita el historial en memoria a los últimos 10 mensajes', () async {
       final fakeService = FakeAsistenteIaChatService();
       final controller = AsistenteIaChatController(chatService: fakeService);
@@ -242,7 +408,7 @@ void main() {
         );
       }
 
-      // Debe haber exactamente 10 mensajes (se descartaron los 4 más antiguos)
+      // Debe haber exactamente 10 mensajes en memoria
       expect(controller.historial.length, equals(10));
       expect(controller.historial.last.rol, equals(RolMensaje.asistente));
     });
