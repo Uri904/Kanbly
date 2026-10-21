@@ -905,6 +905,11 @@ Reglas de conducta estrictas:
       ? '${error.runtimeType} ${error.message}'
       : error.toString();
 
+  @visibleForTesting
+  static String clasificarTextoErrorParaPruebas(String textoOriginal) {
+    return _mensajeParaClase(_clasificarPorMensaje(textoOriginal));
+  }
+
   static _ClaseErrorIa _clasificarPorMensaje(String textoOriginal) {
     final texto = textoOriginal.toLowerCase();
 
@@ -915,10 +920,18 @@ Reglas de conducta estrictas:
         _codigo403.hasMatch(texto)) {
       return _ClaseErrorIa.apiNoHabilitada;
     }
-    if (_contieneAlguno(texto, _marcadoresModeloNoDisponible) ||
-        _codigo404.hasMatch(texto)) {
+
+    // Clasifica como modeloNoDisponible SOLO si el error es un 404 / NOT_FOUND,
+    // o si el texto menciona la ruta/nombre del modelo ("models/...").
+    final es404oNotFound = _codigo404.hasMatch(texto) ||
+        texto.contains('not_found') ||
+        (texto.contains('not found') && (texto.contains('404') || texto.contains('models/')));
+    final mencionaNombreModelo = texto.contains('models/');
+
+    if (es404oNotFound || mencionaNombreModelo) {
       return _ClaseErrorIa.modeloNoDisponible;
     }
+
     if (_contieneAlguno(texto, _marcadoresTemporales) ||
         _codigo5xx.hasMatch(texto)) {
       return _ClaseErrorIa.temporal;
@@ -985,17 +998,6 @@ Reglas de conducta estrictas:
     'not enabled',
     'permission_denied',
     'permission denied',
-  ];
-
-  static const List<String> _marcadoresModeloNoDisponible = <String>[
-    'not found',
-    'not_found',
-    'not supported',
-    'not exist',
-    'not available',
-    'no longer available',
-    'listmodels',
-    'list models',
   ];
 
   static const List<String> _marcadoresTemporales = <String>[

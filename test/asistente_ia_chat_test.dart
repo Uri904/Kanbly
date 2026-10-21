@@ -36,6 +36,26 @@ class FakeAsistenteIaChatService implements IAsistenteIaChatService {
   }
 }
 
+/// Fake de [IAsistenteIaChatService] que lanza una excepción con [causa] para probar debug mode
+class FakeAsistenteIaChatServiceConCausa implements IAsistenteIaChatService {
+  final Object causaError;
+
+  FakeAsistenteIaChatServiceConCausa({required this.causaError});
+
+  @override
+  Future<String> enviarMensajeChat({
+    required String mensajeUsuario,
+    required List<ChatMensaje> historial,
+    required Tablero tablero,
+    required List<Tarea> tareasTablero,
+    required Map<String, String> miembrosNombres,
+    required DateTime fechaActual,
+    void Function(int intento, int intentosMaximos)? onReintento,
+  }) async {
+    throw AsistenteIaException('El servicio está ocupado', causa: causaError);
+  }
+}
+
 void main() {
   final fechaReferencia = DateTime(2026, 10, 20, 10, 0);
 
@@ -428,6 +448,29 @@ void main() {
       expect(ok, isFalse);
       expect(controller.errorMessage, equals(MensajesAsistenteIa.servicioOcupado));
       expect(controller.historial.last.esError, isTrue);
+    });
+
+    test('En modo debug incluye la causa técnica recortada a máximo 300 caracteres', () async {
+      final causaLarga = 'A' * 400; // Causa de 400 caracteres
+      final fakeService = FakeAsistenteIaChatServiceConCausa(
+        causaError: causaLarga,
+      );
+
+      final controller = AsistenteIaChatController(chatService: fakeService);
+
+      final ok = await controller.enviarMensaje(
+        texto: 'Probar causa debug',
+        tablero: tableroPrueba,
+        tareasTablero: const [],
+        miembrosNombres: miembrosMap,
+      );
+
+      expect(ok, isFalse);
+      expect(controller.errorMessage, isNotNull);
+      expect(controller.errorMessage, contains('Detalle técnico:'));
+
+      final parteTecnica = controller.errorMessage!.split('Detalle técnico: ')[1];
+      expect(parteTecnica.length, equals(300));
     });
 
     test('Limpiar historial vacía los mensajes almacenados en memoria', () async {

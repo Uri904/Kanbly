@@ -158,10 +158,20 @@ class AsistenteIaChatController extends ChangeNotifier {
       return true;
     } catch (e) {
       _isLoading = false;
-      final textoError = e is AsistenteIaException ? e.mensaje : e.toString();
+
+      String textoError = e is AsistenteIaException ? e.mensaje : e.toString();
+
+      if (kDebugMode && e is AsistenteIaException && e.causa != null) {
+        var causaStr = e.causa.toString().trim();
+        if (causaStr.length > 300) {
+          causaStr = causaStr.substring(0, 300);
+        }
+        textoError = '$textoError\n\nDetalle técnico: $causaStr';
+      }
+
       _errorMessage = textoError;
 
-      // Opcional: Registrar mensaje de error en el historial
+      // Registrar mensaje de error en el historial
       final idErrorMsg = 'err_${DateTime.now().millisecondsSinceEpoch}';
       final msgError = ChatMensaje(
         id: idErrorMsg,
