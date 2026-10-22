@@ -4,8 +4,10 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'controlador/auth_controller.dart';
+import 'controlador/preferencias_controller.dart';
 import 'controlador/theme_controller.dart';
 import 'Vistas/login_view.dart';
+import 'Vistas/splash_animado_view.dart';
 import 'firebase_options.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'servicios/notificacion_vencimiento_service.dart';
@@ -26,20 +28,30 @@ Future<void> main() async {
 
   await NotificacionVencimientoService.inicializar();
 
-  // Cargar preferencia de tema guardada antes de iniciar la app
+  // Cargar preferencias guardadas antes de iniciar la app
   String? temaInicial;
+  bool mostrarAnimacion = true;
   try {
     final prefs = await SharedPreferences.getInstance();
     temaInicial = prefs.getString('theme_preference');
+    mostrarAnimacion = prefs.getBool('mostrar_animacion_inicio') ?? true;
   } catch (_) {}
 
-  runApp(MyApp(temaInicial: temaInicial));
+  runApp(MyApp(
+    temaInicial: temaInicial,
+    mostrarAnimacion: mostrarAnimacion,
+  ));
 }
 
 class MyApp extends StatelessWidget {
   final String? temaInicial;
+  final bool mostrarAnimacion;
 
-  const MyApp({super.key, this.temaInicial});
+  const MyApp({
+    super.key,
+    this.temaInicial,
+    this.mostrarAnimacion = true,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +62,11 @@ class MyApp extends StatelessWidget {
         ),
         ChangeNotifierProvider(
           create: (context) => ThemeProvider(initialTheme: temaInicial),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => PreferenciasController(
+            initialMostrarAnimacion: mostrarAnimacion,
+          ),
         ),
       ],
       child: Consumer<ThemeProvider>(
@@ -70,7 +87,11 @@ class MyApp extends StatelessWidget {
               Locale('en', 'US'),
               Locale('en'),
             ],
-            home: const LoginView(),
+            home: mostrarAnimacion
+                ? SplashAnimadoView(
+                    destinoBuilder: (_) => const LoginView(),
+                  )
+                : const LoginView(),
             debugShowCheckedModeBanner: false,
           );
         },
