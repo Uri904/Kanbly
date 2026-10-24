@@ -6,9 +6,11 @@ import 'package:intl/intl.dart';
 import '../utilerias/mensajes_error.dart';
 import '../utilerias/validators.dart';
 import '../controlador/auth_controller.dart';
+import '../controlador/preferencias_controller.dart';
 import '../controlador/theme_controller.dart';
 import '../servicios/storage_service.dart';
 import 'login_view.dart';
+import 'splash_animado_view.dart';
 
 class AjustesPage extends StatefulWidget {
   const AjustesPage({super.key});
@@ -320,7 +322,10 @@ class _AjustesPageState extends State<AjustesPage> {
   Widget build(BuildContext context) {
     final authController = Provider.of<AuthController>(context);
     final usuario = authController.usuarioActual;
-    final firebaseUser = FirebaseAuth.instance.currentUser;
+    User? firebaseUser;
+    try {
+      firebaseUser = FirebaseAuth.instance.currentUser;
+    } catch (_) {}
     final bool emailVerificado = firebaseUser?.emailVerified ?? usuario?.emailVerificado ?? false;
     final theme = Theme.of(context);
 
@@ -581,6 +586,39 @@ class _AjustesPageState extends State<AjustesPage> {
                                   themeProvider.setThemeString(nuevo);
                                 }
                               },
+                            ),
+                          );
+                        },
+                      ),
+                      const Divider(height: 1),
+                      Consumer<PreferenciasController>(
+                        builder: (context, prefCtrl, child) {
+                          return SwitchListTile(
+                            secondary: const Icon(Icons.movie_filter_outlined, color: Color(0xFF52ABEB)),
+                            title: const Text('Animación de inicio', style: TextStyle(fontWeight: FontWeight.w600)),
+                            subtitle: const Text('Se aplica la próxima vez que abras la app'),
+                            activeTrackColor: const Color(0xFF63D0A1),
+                            value: prefCtrl.mostrarAnimacion,
+                            onChanged: (val) {
+                              prefCtrl.setMostrarAnimacion(val);
+                            },
+                          );
+                        },
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.play_circle_outline, color: Color(0xFF52ABEB)),
+                        title: const Text('Ver animación', style: TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: const Text('Toca para probar la animación de inicio'),
+                        trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => SplashAnimadoView(
+                                vistaPrevia: true,
+                                destinoBuilder: (_) => const SizedBox(),
+                              ),
                             ),
                           );
                         },

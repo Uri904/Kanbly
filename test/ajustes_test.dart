@@ -1,9 +1,75 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kanbly/modelo/usuario.dart';
+import 'package:kanbly/controlador/auth_controller.dart';
+import 'package:kanbly/controlador/preferencias_controller.dart';
 import 'package:kanbly/controlador/theme_controller.dart';
+import 'package:kanbly/Vistas/ajustes_page.dart';
+
+class FakeAuthController extends ChangeNotifier implements AuthController {
+  @override
+  String get userName => 'Usuario Pruebas';
+
+  @override
+  String get userEmail => 'prueba@e.uttecamac.edu.mx';
+
+  @override
+  String get userRole => 'estudiante';
+
+  @override
+  Usuario? get usuarioActual => Usuario(
+        id: 'test_u',
+        email: 'prueba@e.uttecamac.edu.mx',
+        nombreCompleto: 'Usuario Pruebas',
+        fechaRegistro: DateTime(2025, 1, 1),
+        rol: 'estudiante',
+      );
+
+  @override
+  AuthStatus get status => AuthStatus.authenticated;
+
+  @override
+  String? get errorMessage => null;
+
+  @override
+  bool get isLoading => false;
+
+  @override
+  bool get isAuthenticated => true;
+
+  @override
+  void clearError() {}
+
+  @override
+  Future<bool> register({required String email, required String password, required String nombreCompleto}) async => true;
+
+  @override
+  Future<bool> login({required String email, required String password}) async => true;
+
+  @override
+  Future<void> logout() async {}
+
+  @override
+  Future<bool> checkAuthStatus() async => true;
+
+  @override
+  Future<bool> resetPassword(String email) async => true;
+
+  @override
+  Future<bool> sendVerificationEmail() async => true;
+
+  @override
+  Future<bool> actualizarPerfil({String? nombreCompleto, String? fotoPerfil}) async => true;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('Pruebas de la Sección de Ajustes y Perfil de Usuario', () {
     test('1. Modelo Usuario admite y actualiza correctamente la foto de perfil y datos personales', () {
       final usuarioInicial = Usuario(
@@ -89,6 +155,25 @@ void main() {
       themeProvider.setThemeString('Claro');
       expect(themeProvider.themeMode, equals(ThemeMode.light));
       expect(themeProvider.isDarkMode, isFalse);
+    });
+
+    testWidgets('5. AjustesPage contiene los controles "Animación de inicio" y "Ver animación"', (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthController>(create: (_) => FakeAuthController()),
+            ChangeNotifierProvider(create: (_) => ThemeProvider()),
+            ChangeNotifierProvider(create: (_) => PreferenciasController()),
+          ],
+          child: const MaterialApp(
+            home: AjustesPage(),
+          ),
+        ),
+      );
+
+      expect(find.text('Animación de inicio'), findsOneWidget);
+      expect(find.text('Ver animación'), findsOneWidget);
     });
   });
 }
