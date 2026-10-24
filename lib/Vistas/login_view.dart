@@ -356,7 +356,7 @@ class _LoginViewState extends State<LoginView> {
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
                                 decoration: BoxDecoration(
-                                  color: blanco,
+                                  color: theme.cardColor,
                                   borderRadius: BorderRadius.circular(7),
                                 ),
                                 child: ShaderMask(

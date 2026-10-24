@@ -245,7 +245,7 @@ class _RegisterViewState extends State<RegisterView> {
                             children: [
                               CircleAvatar(
                                 radius: 50,
-                                backgroundColor: Colors.grey[100],
+                                backgroundColor: theme.cardColor,
                                 backgroundImage: _imagenPerfil != null
                                     ? FileImage(_imagenPerfil!)
                                     : null,
@@ -295,7 +295,7 @@ class _RegisterViewState extends State<RegisterView> {
                       controller: _nameController,
                       decoration: InputDecoration(
                         labelText: 'Nombre Completo',
-                        labelStyle: TextStyle(color: grisOscuro, fontSize: 14),
+                        labelStyle: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.75), fontSize: 14),
                         prefixIcon: ShaderMask(
                           shaderCallback: (bounds) => const LinearGradient(
                             colors: [azulCielo, verdeTurquesa],
@@ -314,7 +314,7 @@ class _RegisterViewState extends State<RegisterView> {
                           borderSide: BorderSide(color: verdeTurquesa, width: 2),
                         ),
                         filled: true,
-                        fillColor: blanco,
+                        fillColor: theme.cardColor,
                         contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                       ),
                       validator: Validators.validateName,
@@ -327,7 +327,7 @@ class _RegisterViewState extends State<RegisterView> {
                       controller: _emailController,
                       decoration: InputDecoration(
                         labelText: 'Correo Institucional',
-                        labelStyle: TextStyle(color: grisOscuro, fontSize: 14),
+                        labelStyle: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.75), fontSize: 14),
                         hintText: 'ejemplo@e.uttecamac.edu.mx',
                         hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
                         prefixIcon: ShaderMask(
@@ -349,7 +349,7 @@ class _RegisterViewState extends State<RegisterView> {
                           borderSide: BorderSide(color: verdeTurquesa, width: 2),
                         ),
                         filled: true,
-                        fillColor: blanco,
+                        fillColor: theme.cardColor,
                         contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                       ),
                       validator: Validators.validateInstitutionalEmail,
@@ -364,7 +364,7 @@ class _RegisterViewState extends State<RegisterView> {
                       obscureText: _obscurePassword,
                       decoration: InputDecoration(
                         labelText: 'Contraseña',
-                        labelStyle: TextStyle(color: grisOscuro, fontSize: 14),
+                        labelStyle: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.75), fontSize: 14),
                         prefixIcon: ShaderMask(
                           shaderCallback: (bounds) => const LinearGradient(
                             colors: [azulCielo, verdeTurquesa],
@@ -396,7 +396,7 @@ class _RegisterViewState extends State<RegisterView> {
                           borderSide: BorderSide(color: verdeTurquesa, width: 2),
                         ),
                         filled: true,
-                        fillColor: blanco,
+                        fillColor: theme.cardColor,
                         contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                       ),
                       validator: Validators.validatePassword,
@@ -410,7 +410,7 @@ class _RegisterViewState extends State<RegisterView> {
                       obscureText: _obscureConfirmPassword,
                       decoration: InputDecoration(
                         labelText: 'Confirmar Contraseña',
-                        labelStyle: TextStyle(color: grisOscuro, fontSize: 14),
+                        labelStyle: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.75), fontSize: 14),
                         prefixIcon: ShaderMask(
                           shaderCallback: (bounds) => const LinearGradient(
                             colors: [azulCielo, verdeTurquesa],
@@ -442,7 +442,7 @@ class _RegisterViewState extends State<RegisterView> {
                           borderSide: BorderSide(color: verdeTurquesa, width: 2),
                         ),
                         filled: true,
-                        fillColor: blanco,
+                        fillColor: theme.cardColor,
                         contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                       ),
                       validator: (value) => Validators.validateConfirmPassword(
@@ -476,7 +476,7 @@ class _RegisterViewState extends State<RegisterView> {
                           child: RichText(
                             text: TextSpan(
                               style: TextStyle(
-                                color: grisOscuro,
+                                color: theme.colorScheme.onSurface,
                                 fontSize: 13,
                                 height: 1.4,
                               ),
