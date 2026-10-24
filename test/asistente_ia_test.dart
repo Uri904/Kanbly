@@ -348,6 +348,21 @@ void main() {
       }
     }
 
+    test('Clasificación estricta de errores: tool use is not supported vs 404 con models/gemini', () {
+      const errorToolUse = 'tool use is not supported with this configuration';
+      const errorModel404 = 'ServerException: 404 Not Found for models/gemini-3.5-flash-lite';
+
+      final mensajeToolUse = AsistenteIaService.clasificarTextoErrorParaPruebas(errorToolUse);
+      final mensajeModel404 = AsistenteIaService.clasificarTextoErrorParaPruebas(errorModel404);
+
+      // tool use no debe clasificarse como modeloNoDisponible (debe ser errorInesperado)
+      expect(mensajeToolUse, equals(MensajesAsistenteIa.errorInesperado));
+      expect(mensajeToolUse, isNot(equals(MensajesAsistenteIa.modeloNoDisponible)));
+
+      // 404 con models/gemini sí debe clasificarse como modeloNoDisponible
+      expect(mensajeModel404, equals(MensajesAsistenteIa.modeloNoDisponible));
+    });
+
     test('No reintenta ni conmuta cuando el primer modelo tiene éxito', () async {
       final generador = GeneradorIaFalso(<Object?>[
         '{"tareas":[{"titulo":"Enviar reporte","columna":"Pendiente"}]}',

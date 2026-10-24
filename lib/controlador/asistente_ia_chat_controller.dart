@@ -1,0 +1,327 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:speech_to_text/speech_to_text.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../modelo/chat_mensaje.dart';
+import '../modelo/tablero.dart';
+import '../modelo/tarea.dart';
+import '../servicios/asistente_ia_service.dart';
+
+/// Controlador de estado para la sesión de Chatbot de IA de Solo Lectura (Fase 2).
+///
+/// Mantiene el historial de la conversación en memoria (limitado a los últimos 10 mensajes),
+/// la integración con dictado por voz opcional (`speech_to_text` en `es_MX`) y el patrón de
+/// estado observable mediante [ChangeNotifier].
+class AsistenteIaChatController extends ChangeNotifier {
+  final IAsistenteIaChatService _chatService;
+  final SpeechToText _speechToText;
+
+  List<ChatMensaje> _historial = [];
+  bool _isLoading = false;
+  bool _isListening = false;
+  bool _speechInitialized = false;
+  bool _permissionPermanentlyDenied = false;
+  String _transcription = '';
+  String? _errorMessage;
+  String _mensajeCarga = 'Consultando información con IA...';
+
+  AsistenteIaChatController({
+    IAsistenteIaChatService? chatService,
+    SpeechToText? speechToText,
+  })  : _chatService = chatService ?? AsistenteIaService(),
+        _speechToText = speechToText ?? SpeechToText();
+
+  // Getters de estado
+  List<ChatMensaje> get historial => List.unmodifiable(_historial);
+  bool get isLoading => _isLoading;
+  bool get isListening => _isListening;
+  bool get speechInitialized => _speechInitialized;
+  bool get permissionPermanentlyDenied => _permissionPermanentlyDenied;
+  String get transcription => _transcription;
+  String? get errorMessage => _errorMessage;
+  String get mensajeCarga => _mensajeCarga;
+
+  /// Limpia cualquier mensaje de error activo en la UI.
+  void limpiarError() {
+    _errorMessage = null;
+    notifyListeners();
+  }
+
+  /// Limpia el historial de la conversación en memoria.
+  void limpiarHistorial() {
+    _historial.clear();
+    _errorMessage = null;
+    notifyListeners();
+  }
+
+  /// Establece o actualiza manualmente la transcripción actual.
+  void setTranscription(String text) {
+    _transcription = text;
+    notifyListeners();
+  }
+
+  /// Construye el historial sanitizado y recortado para enviar al servicio de IA.
+  ///
+  /// Excluye el mensaje actual del usuario y mensajes de error ([ChatMensaje.esError]).
+  /// Mantiene solo parejas completas (usuario, asistente) ordenadas alternadamente,
+  /// recortando a los últimos 10 mensajes (máximo 5 parejas).
+  static List<ChatMensaje> construirHistorialEnviar(
+    List<ChatMensaje> historialCompleto, {
+    String? idMensajeActual,
+  }) {
+    final sinErroresNiActual = historialCompleto.where((m) {
+      if (m.esError) return false;
+      if (idMensajeActual != null && m.id == idMensajeActual) return false;
+      return true;
+    }).toList();
+
+    final List<List<ChatMensaje>> parejas = [];
+    for (int i = 0; i < sinErroresNiActual.length - 1; i++) {
+      final m1 = sinErroresNiActual[i];
+      final m2 = sinErroresNiActual[i + 1];
+      if (m1.rol == RolMensaje.usuario && m2.rol == RolMensaje.asistente) {
+        parejas.add([m1, m2]);
+        i++; // Saltar m2 porque ya forma pareja con m1
+      }
+    }
+
+    final parejasRecortadas = parejas.length > 5
+        ? parejas.sublist(parejas.length - 5)
+        : parejas;
+
+    return parejasRecortadas.expand((p) => p).toList();
+  }
+
+  /// Envía un mensaje del usuario al servicio de IA y registra la respuesta.
+  Future<bool> enviarMensaje({
+    required String texto,
+    required Tablero tablero,
+    required List<Tarea> tareasTablero,
+    required Map<String, String> miembrosNombres,
+    String? usuarioUid,
+    String? usuarioNombre,
+    String? usuarioRol,
+    DateTime? fechaActual,
+  }) async {
+    final textoLimpio = texto.trim();
+    if (textoLimpio.isEmpty) {
+      _errorMessage = 'Escribe o dicta una consulta antes de enviar.';
+      notifyListeners();
+      return false;
+    }
+
+    _errorMessage = null;
+    _isLoading = true;
+    _mensajeCarga = 'Consultando información con IA...';
+
+    // Determinar identidad del usuario actual
+    String? currentUid;
+    try {
+      currentUid = FirebaseAuth.instance.currentUser?.uid;
+    } catch (_) {}
+    final uidFinal = usuarioUid ?? currentUid ?? '';
+
+    String? currentDisplayName;
+    try {
+      currentDisplayName = FirebaseAuth.instance.currentUser?.displayName;
+    } catch (_) {}
+    final nombreFinal = usuarioNombre ??
+        (uidFinal.isNotEmpty && miembrosNombres.containsKey(uidFinal)
+            ? miembrosNombres[uidFinal]!
+            : currentDisplayName ?? 'Usuario');
+
+    final rolFinal = usuarioRol ??
+        (uidFinal.isNotEmpty
+            ? (tablero.esCreador(uidFinal)
+                ? 'creador'
+                : (tablero.esAdminOCreador(uidFinal)
+                    ? 'administrador'
+                    : 'miembro'))
+            : 'miembro');
+
+    // Construir el historial sanitizado a enviar antes de registrar el nuevo mensaje
+    final historialParaEnviar = construirHistorialEnviar(_historial);
+
+    // 1. Registrar mensaje del usuario en el historial para la UI
+    final idUsuarioMsg = 'user_${DateTime.now().millisecondsSinceEpoch}';
+    final msgUsuario = ChatMensaje(
+      id: idUsuarioMsg,
+      rol: RolMensaje.usuario,
+      texto: textoLimpio,
+      fecha: DateTime.now(),
+    );
+
+    _historial.add(msgUsuario);
+    _recortarHistorial();
+    notifyListeners();
+
+    try {
+      final respuestaIa = await _chatService.enviarMensajeChat(
+        mensajeUsuario: textoLimpio,
+        historial: historialParaEnviar,
+        tablero: tablero,
+        tareasTablero: tareasTablero,
+        miembrosNombres: miembrosNombres,
+        fechaActual: fechaActual ?? DateTime.now(),
+        usuarioUid: uidFinal,
+        usuarioNombre: nombreFinal,
+        usuarioRol: rolFinal,
+        onReintento: (intento, intentosMaximos) {
+          _mensajeCarga =
+              'El servicio está ocupado, reintentando ($intento/$intentosMaximos)...';
+          notifyListeners();
+        },
+      );
+
+      final textoLimpioRespuesta =
+          AsistenteIaService.limpiarMarkdownRespuesta(respuestaIa);
+
+      // 2. Registrar respuesta de la IA en el historial
+      final idAiMsg = 'ai_${DateTime.now().millisecondsSinceEpoch}';
+      final msgAi = ChatMensaje(
+        id: idAiMsg,
+        rol: RolMensaje.asistente,
+        texto: textoLimpioRespuesta,
+        fecha: DateTime.now(),
+      );
+
+      _historial.add(msgAi);
+      _recortarHistorial();
+      _transcription = '';
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _isLoading = false;
+
+      String textoError = e is AsistenteIaException ? e.mensaje : e.toString();
+
+      if (kDebugMode && e is AsistenteIaException && e.causa != null) {
+        var causaStr = e.causa.toString().trim();
+        if (causaStr.length > 300) {
+          causaStr = causaStr.substring(0, 300);
+        }
+        textoError = '$textoError\n\nDetalle técnico: $causaStr';
+      }
+
+      _errorMessage = textoError;
+
+      // Registrar mensaje de error en el historial
+      final idErrorMsg = 'err_${DateTime.now().millisecondsSinceEpoch}';
+      final msgError = ChatMensaje(
+        id: idErrorMsg,
+        rol: RolMensaje.asistente,
+        texto: 'Error: $textoError',
+        fecha: DateTime.now(),
+        esError: true,
+      );
+      _historial.add(msgError);
+      _recortarHistorial();
+
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Limita el historial en memoria a los últimos 10 mensajes.
+  void _recortarHistorial() {
+    if (_historial.length > 10) {
+      _historial = _historial.sublist(_historial.length - 10);
+    }
+  }
+
+  // ===========================================================================
+  // RECONOCIMIENTO DE VOZ (speech_to_text con localeId: 'es_MX')
+  // ===========================================================================
+
+  /// Inicializa el reconocimiento de voz.
+  Future<bool> inicializarVoz() async {
+    if (_speechInitialized) return true;
+
+    try {
+      _speechInitialized = await _speechToText.initialize(
+        onStatus: (status) {
+          if (status == 'done' || status == 'notListening') {
+            _isListening = false;
+            notifyListeners();
+          }
+        },
+        onError: (errorNotification) {
+          _isListening = false;
+          if (errorNotification.permanent) {
+            _permissionPermanentlyDenied = true;
+          }
+          _errorMessage = 'Error de micrófono: ${errorNotification.errorMsg}';
+          notifyListeners();
+        },
+      );
+
+      if (!_speechInitialized) {
+        _permissionPermanentlyDenied = true;
+        _errorMessage =
+            'No se pudo inicializar el micrófono o el permiso fue denegado.';
+      } else {
+        _permissionPermanentlyDenied = false;
+      }
+
+      notifyListeners();
+      return _speechInitialized;
+    } catch (e) {
+      _speechInitialized = false;
+      _permissionPermanentlyDenied = true;
+      _errorMessage = 'Excepción al inicializar micrófono: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Inicia la escucha de voz en español de México (`es_MX`).
+  Future<void> iniciarEscucha() async {
+    _errorMessage = null;
+
+    if (!_speechInitialized) {
+      final ok = await inicializarVoz();
+      if (!ok) return;
+    }
+
+    try {
+      _isListening = true;
+      notifyListeners();
+
+      await _speechToText.listen(
+        onResult: (result) {
+          _transcription = result.recognizedWords;
+          notifyListeners();
+        },
+        listenOptions: SpeechListenOptions(
+          localeId: 'es_MX',
+          listenFor: const Duration(seconds: 45),
+          pauseFor: const Duration(seconds: 5),
+        ),
+      );
+    } catch (e) {
+      _isListening = false;
+      _errorMessage = 'Error al iniciar la escucha por voz: $e';
+      notifyListeners();
+    }
+  }
+
+  /// Detiene la escucha por voz.
+  Future<void> detenerEscucha() async {
+    try {
+      await _speechToText.stop();
+      _isListening = false;
+      notifyListeners();
+    } catch (_) {
+      _isListening = false;
+      notifyListeners();
+    }
+  }
+
+  /// Permite abrir los ajustes del dispositivo si el permiso del micrófono fue denegado.
+  Future<void> abrirAjustesDispositivo() async {
+    try {
+      await openAppSettings();
+    } catch (_) {}
+  }
+}

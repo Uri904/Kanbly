@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 // --- IMPORTS DE LA ARQUITECTURA DEL EQUIPO ---
 import 'package:provider/provider.dart';
 import '../controlador/asistente_ia_controller.dart';
+import '../controlador/asistente_ia_chat_controller.dart';
+import 'asistente_ia_chat_view.dart';
 import '../modelo/usuario.dart';
 import 'captura_voz_view.dart';
 import 'encabezado.dart';
@@ -16,6 +18,7 @@ import '../modelo/tablero.dart';
 import '../modelo/tarea.dart';
 import '../servicios/firestore_service.dart';
 import '../utilerias/formato_util.dart';
+import '../utilerias/kanban_utils.dart';
 import 'calendario_tablero.dart';
 import 'recordatorios.dart';
 // ==========================================
@@ -125,6 +128,13 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                           icon: const Icon(Icons.auto_awesome_rounded, color: Color(0xFF63D0A1), size: 26),
                           tooltip: 'Asistente IA por Voz',
                           onPressed: () => _abrirAsistenteIa(context, tableroActivo),
+                        ),
+                      // --- BOTÓN CHATBOT IA DE CONSULTA (SOLO LECTURA) ---
+                      if (tableroActivo != null && (tableroActivo.creadorId == currentUid || tableroActivo.miembrosIds.contains(currentUid)))
+                        IconButton(
+                          icon: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF63D0A1), size: 24),
+                          tooltip: 'Chatbot IA (Consulta de Tablero)',
+                          onPressed: () => _abrirChatbotIa(context, tableroActivo),
                         ),
                       // --- BOTÓN DE EDICIÓN Y PERSONALIZACIÓN DEL TABLERO (SOLO DUEÑO O ADMIN) ---
                       if (tableroActivo != null && tableroActivo.esAdminOCreador(currentUid))
@@ -290,7 +300,7 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
 
                             // BÚSQUEDA ROBUSTA Y GARANTÍA CERO PÉRDIDA DE TAREAS
                             final tareasColumna = todasLasTareas.where((t) {
-                              return _correspondeAColumna(t, colNombre, columnasList, index);
+                              return KanbanUtils.correspondeAColumna(t, colNombre, columnasList, index);
                             }).toList();
 
                             final colorHeader = paletaColoresHeaders[index % paletaColoresHeaders.length];
@@ -318,64 +328,6 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
         );
       },
     );
-  }
-
-  // --- COMPROBACIÓN FLEXIBLE DE PERTENENCIA DE TAREA A COLUMNA ---
-  bool _correspondeAColumna(
-    Tarea tarea,
-    String colNombre,
-    List<String> todasLasColumnas,
-    int colIndex,
-  ) {
-    final colClean = colNombre.trim().toLowerCase();
-    final estadoNombreClean = tarea.estadoNombre.trim().toLowerCase();
-    final estadoValueClean = tarea.estado.value.trim().toLowerCase();
-
-    // 1. Coincidencia directa ignorando mayúsculas/minúsculas y espacios
-    if (estadoNombreClean == colClean || estadoValueClean == colClean) {
-      return true;
-    }
-
-    // 2. Mapeo de sinónimos habituales
-    final esPorHacer = (colClean == 'pendiente' || colClean == 'por hacer');
-    final tareaEsPorHacer = (estadoNombreClean == 'pendiente' || estadoNombreClean == 'por hacer');
-    if (esPorHacer && tareaEsPorHacer) return true;
-
-    final esEnProgreso = (colClean == 'en progreso' || colClean == 'en proceso' || colClean == 'haciendo');
-    final tareaEsEnProgreso = (estadoNombreClean == 'en progreso' || estadoNombreClean == 'en proceso' || estadoNombreClean == 'haciendo');
-    if (esEnProgreso && tareaEsEnProgreso) return true;
-
-    final esCompletada = (colClean == 'completada' || colClean == 'completado' || colClean == 'terminada' || colClean == 'hecho');
-    final tareaEsCompletada = (estadoNombreClean == 'completada' || estadoNombreClean == 'completado' || estadoNombreClean == 'terminada' || estadoNombreClean == 'hecho');
-    if (esCompletada && tareaEsCompletada) return true;
-
-    // 3. Garantía Cero Pérdidas: si no coincide con NINGUNA columna existente en el tablero, la colocamos en la primera columna
-    bool coincideConAlgunaOtra = false;
-    for (final otraCol in todasLasColumnas) {
-      final otraClean = otraCol.trim().toLowerCase();
-      if (estadoNombreClean == otraClean || estadoValueClean == otraClean) {
-        coincideConAlgunaOtra = true;
-        break;
-      }
-      if ((otraClean == 'pendiente' || otraClean == 'por hacer') && tareaEsPorHacer) {
-        coincideConAlgunaOtra = true;
-        break;
-      }
-      if ((otraClean == 'en progreso' || otraClean == 'en proceso' || otraClean == 'haciendo') && tareaEsEnProgreso) {
-        coincideConAlgunaOtra = true;
-        break;
-      }
-      if ((otraClean == 'completada' || otraClean == 'completado' || otraClean == 'terminada' || otraClean == 'hecho') && tareaEsCompletada) {
-        coincideConAlgunaOtra = true;
-        break;
-      }
-    }
-
-    if (!coincideConAlgunaOtra && colIndex == 0) {
-      return true;
-    }
-
-    return false;
   }
 
   // --- MÉTODOS AUXILIARES DE LA INTERFAZ ---
@@ -596,6 +548,72 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
           child: CapturaVozView(
             tablero: tableroActivo,
             miembrosEquipo: miembros,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _abrirChatbotIa(BuildContext context, Tablero? tableroActivo) async {
+    if (tableroActivo == null) return;
+
+    final currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final puedeVer = tableroActivo.creadorId == currentUid ||
+        tableroActivo.miembrosIds.contains(currentUid);
+
+    if (!puedeVer) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No tienes permiso para ver este tablero'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Cargar tareas del tablero activo
+    List<Tarea> tareas;
+    try {
+      tareas = await _firestoreService.obtenerTareasDeTablero(tableroActivo.id);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error al cargar las tareas del tablero. Intenta de nuevo.'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Cargar mapa de nombres de integrantes
+    final Map<String, String> miembrosNombres = {};
+    final uidsACargar = {tableroActivo.creadorId, ...tableroActivo.miembrosIds};
+
+    for (final uid in uidsACargar) {
+      if (uid.isNotEmpty) {
+        try {
+          final usuario = await _firestoreService.obtenerUsuarioPorId(uid);
+          if (usuario != null) {
+            miembrosNombres[uid] = usuario.nombre;
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (!mounted) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChangeNotifierProvider(
+          create: (_) => AsistenteIaChatController(),
+          child: AsistenteIaChatView(
+            tablero: tableroActivo,
+            tareasTablero: tareas,
+            miembrosNombres: miembrosNombres,
           ),
         ),
       ),
