@@ -18,11 +18,11 @@ class VistaPreviaBorradoresView extends StatelessWidget {
   });
 
   void _seleccionarFecha(
-    BuildContext context,
-    TareaBorrador borrador,
-    int index,
-    AsistenteIaController controller,
-  ) async {
+      BuildContext context,
+      TareaBorrador borrador,
+      int index,
+      AsistenteIaController controller,
+      ) async {
     final now = DateTime.now();
     final initialDate = borrador.fechaLimite ?? now;
 
@@ -55,9 +55,9 @@ class VistaPreviaBorradoresView extends StatelessWidget {
   }
 
   void _confirmarYGuardar(
-    BuildContext context,
-    AsistenteIaController controller,
-  ) async {
+      BuildContext context,
+      AsistenteIaController controller,
+      ) async {
     final currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
     final cantidadTareas = controller.borradores.length;
 
@@ -78,7 +78,10 @@ class VistaPreviaBorradoresView extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  '¡Se agregaron $cantidadTareas tareas al tablero $tablero.nombre!',
+                  // Antes decía "$tablero.nombre" (sin llaves) y mostraba "Instance of 'Tablero'.nombre".
+                  cantidadTareas == 1
+                      ? '¡Se agregó 1 tarea al tablero "${tablero.nombre}"!'
+                      : '¡Se agregaron $cantidadTareas tareas al tablero "${tablero.nombre}"!',
                 ),
               ),
             ],
@@ -310,10 +313,11 @@ class VistaPreviaBorradoresView extends StatelessWidget {
                           // Dropdown de Columna
                           Expanded(
                             child: DropdownButtonFormField<String>(
+                              isExpanded: true, // el texto se recorta con "…" en vez de desbordar
                               value:
-                                  columnasDisponibles.contains(borrador.columna)
-                                      ? borrador.columna
-                                      : columnasDisponibles.first,
+                              columnasDisponibles.contains(borrador.columna)
+                                  ? borrador.columna
+                                  : columnasDisponibles.first,
                               decoration: const InputDecoration(
                                 labelText: 'Columna',
                                 contentPadding: EdgeInsets.symmetric(
@@ -324,7 +328,7 @@ class VistaPreviaBorradoresView extends StatelessWidget {
                               items: columnasDisponibles.map((col) {
                                 return DropdownMenuItem<String>(
                                   value: col,
-                                  child: Text(col, style: const TextStyle(fontSize: 13)),
+                                  child: Text(col, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
                                 );
                               }).toList(),
                               onChanged: (val) {
@@ -342,8 +346,9 @@ class VistaPreviaBorradoresView extends StatelessWidget {
                           // Dropdown de Asignado
                           Expanded(
                             child: DropdownButtonFormField<String?>(
+                              isExpanded: true, // nombres largos ya no desbordan la tarjeta
                               value: miembrosEquipo
-                                      .any((m) => m.id == borrador.asignadoUid)
+                                  .any((m) => m.id == borrador.asignadoUid)
                                   ? borrador.asignadoUid
                                   : null,
                               decoration: const InputDecoration(
@@ -361,7 +366,7 @@ class VistaPreviaBorradoresView extends StatelessWidget {
                                 ...miembrosEquipo.map((m) {
                                   return DropdownMenuItem<String?>(
                                     value: m.id,
-                                    child: Text(m.nombre, style: const TextStyle(fontSize: 13)),
+                                    child: Text(m.nombre, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
                                   );
                                 }),
                               ],
@@ -470,39 +475,39 @@ class VistaPreviaBorradoresView extends StatelessWidget {
             ),
             child: controller.isLoading
                 ? const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      CircularProgressIndicator(color: verdeTurquesa),
-                      SizedBox(width: 12),
-                      Text(
-                        'Guardando tareas en Firestore...',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: verdeTurquesa,
-                        ),
-                      ),
-                    ],
-                  )
-                : ElevatedButton.icon(
-                    onPressed: () => _confirmarYGuardar(context, controller),
-                    icon: const Icon(Icons.cloud_upload_rounded, color: Colors.white),
-                    label: Text(
-                      'Subir al tablero (${controller.borradores.length} ${controller.borradores.length == 1 ? 'tarea' : 'tareas'})',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: verdeTurquesa,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      elevation: 2,
-                    ),
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(color: verdeTurquesa),
+                SizedBox(width: 12),
+                Text(
+                  'Guardando tareas en Firestore...',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: verdeTurquesa,
                   ),
+                ),
+              ],
+            )
+                : ElevatedButton.icon(
+              onPressed: () => _confirmarYGuardar(context, controller),
+              icon: const Icon(Icons.cloud_upload_rounded, color: Colors.white),
+              label: Text(
+                'Subir al tablero (${controller.borradores.length} ${controller.borradores.length == 1 ? 'tarea' : 'tareas'})',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: verdeTurquesa,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                elevation: 2,
+              ),
+            ),
           );
         },
       ),

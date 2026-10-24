@@ -13,6 +13,7 @@ import '../servicios/firestore_service.dart';
 import '../servicios/storage_service.dart';
 import '../utilerias/formato_util.dart';
 import 'pantalla_visualizador_adjunto.dart';
+import '../utilerias/mensajes_error.dart';
 
 class DetalleTareaWidget extends StatefulWidget {
   final Tarea tarea;
@@ -158,9 +159,12 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
                 children: [
                   Icon(Icons.edit_rounded, size: 16, color: verdeTurquesa),
                   SizedBox(width: 8),
-                  Text(
-                    'Modo Edición: Modifica los campos y guarda los cambios.',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: verdeTurquesa),
+                  // Expanded: en vertical el texto se baja de renglón en lugar de desbordar.
+                  Expanded(
+                    child: Text(
+                      'Modo Edición: Modifica los campos y guarda los cambios.',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: verdeTurquesa),
+                    ),
                   ),
                 ],
               ),
@@ -171,12 +175,19 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Asignar a Integrantes:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                  Text(
-                    _asignadosA.isEmpty
-                        ? 'Sin asignar (0)'
-                        : '${_asignadosA.length} persona${_asignadosA.length > 1 ? "s" : ""}',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _asignadosA.isEmpty ? Colors.grey : azulCielo),
+                  const Flexible(
+                    child: Text('Asignar a Integrantes:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      _asignadosA.isEmpty
+                          ? 'Sin asignar (0)'
+                          : '${_asignadosA.length} persona${_asignadosA.length > 1 ? "s" : ""}',
+                      textAlign: TextAlign.end,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _asignadosA.isEmpty ? Colors.grey : azulCielo),
+                    ),
                   ),
                 ],
               ),
@@ -184,54 +195,54 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
               _cargandoMiembros
                   ? const LinearProgressIndicator()
                   : _miembrosEquipo.isEmpty
-                      ? Text('No hay integrantes en este tablero.', style: TextStyle(fontSize: 12, color: Colors.grey.shade500))
-                      : Wrap(
-                          spacing: 8,
-                          runSpacing: 6,
-                          children: _miembrosEquipo.map((m) {
-                            final estaSeleccionado = _asignadosA.contains(m.id);
-                            return FilterChip(
-                              avatar: CircleAvatar(
-                                backgroundColor: estaSeleccionado ? Colors.white : (isDark ? Colors.grey.shade800 : Colors.grey.shade300),
-                                child: Text(
-                                  m.nombreCompleto.isNotEmpty ? m.nombreCompleto[0].toUpperCase() : '?',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: estaSeleccionado ? azulCielo : (isDark ? Colors.grey.shade300 : Colors.grey.shade700),
-                                  ),
-                                ),
-                              ),
-                              label: Text(
-                                m.nombreCompleto,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: estaSeleccionado ? FontWeight.bold : FontWeight.normal,
-                                  color: estaSeleccionado ? Colors.white : textoPrincipal,
-                                ),
-                              ),
-                              selected: estaSeleccionado,
-                              selectedColor: azulCielo,
-                              checkmarkColor: Colors.white,
-                              backgroundColor: isDark ? const Color(0xFF182030) : Colors.grey.shade50,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                side: BorderSide(
-                                  color: estaSeleccionado ? azulCielo : (isDark ? const Color(0xFF2D3748) : Colors.grey.shade300),
-                                ),
-                              ),
-                              onSelected: (bool selected) {
-                                setState(() {
-                                  if (selected) {
-                                    _asignadosA.add(m.id);
-                                  } else {
-                                    _asignadosA.remove(m.id);
-                                  }
-                                });
-                              },
-                            );
-                          }).toList(),
+                  ? Text('No hay integrantes en este tablero.', style: TextStyle(fontSize: 12, color: Colors.grey.shade500))
+                  : Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: _miembrosEquipo.map((m) {
+                  final estaSeleccionado = _asignadosA.contains(m.id);
+                  return FilterChip(
+                    avatar: CircleAvatar(
+                      backgroundColor: estaSeleccionado ? Colors.white : (isDark ? Colors.grey.shade800 : Colors.grey.shade300),
+                      child: Text(
+                        m.nombreCompleto.isNotEmpty ? m.nombreCompleto[0].toUpperCase() : '?',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: estaSeleccionado ? azulCielo : (isDark ? Colors.grey.shade300 : Colors.grey.shade700),
                         ),
+                      ),
+                    ),
+                    label: Text(
+                      m.nombreCompleto,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: estaSeleccionado ? FontWeight.bold : FontWeight.normal,
+                        color: estaSeleccionado ? Colors.white : textoPrincipal,
+                      ),
+                    ),
+                    selected: estaSeleccionado,
+                    selectedColor: azulCielo,
+                    checkmarkColor: Colors.white,
+                    backgroundColor: isDark ? const Color(0xFF182030) : Colors.grey.shade50,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(
+                        color: estaSeleccionado ? azulCielo : (isDark ? const Color(0xFF2D3748) : Colors.grey.shade300),
+                      ),
+                    ),
+                    onSelected: (bool selected) {
+                      setState(() {
+                        if (selected) {
+                          _asignadosA.add(m.id);
+                        } else {
+                          _asignadosA.remove(m.id);
+                        }
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
               const SizedBox(height: 12),
             ],
 
@@ -309,33 +320,33 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
           else
             _descController.text.trim().isNotEmpty
                 ? Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF182030) : Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: isDark ? const Color(0xFF2D3748) : Colors.grey.shade200),
-                    ),
-                    child: Text(
-                      _descController.text.trim(),
-                      style: GoogleFonts.inter(
-                        fontSize: 13,
-                        color: textoPrincipal,
-                        height: 1.4,
-                      ),
-                    ),
-                  )
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF182030) : Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: isDark ? const Color(0xFF2D3748) : Colors.grey.shade200),
+              ),
+              child: Text(
+                _descController.text.trim(),
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: textoPrincipal,
+                  height: 1.4,
+                ),
+              ),
+            )
                 : Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Text(
-                      'Sin descripción detallada.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade500,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ),
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text(
+                'Sin descripción detallada.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade500,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
           const SizedBox(height: 14),
 
           // SECCIÓN: ARCHIVOS ADJUNTOS
@@ -455,487 +466,499 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
             color: theme.cardColor,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // --- BARRA SUPERIOR LIMPIA CON ACCIONES ---
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Indicador de estado rápido / Columna compacta
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: azulCielo.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: azulCielo.withValues(alpha: 0.4)),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _columnaActual,
-                      isDense: true,
-                      icon: const Icon(Icons.arrow_drop_down_rounded, color: azulCielo, size: 20),
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: azulCielo),
-                      items: _columnasDisponibles.map((col) {
-                        return DropdownMenuItem(
-                          value: col,
-                          child: Text(col, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textoPrincipal)),
-                        );
-                      }).toList(),
-                      onChanged: (_procesando || !permisos.moverTareas) ? null : _cambiarEstadoRapido,
-                    ),
-                  ),
-                ),
-
-                Row(
-                  children: [
-                    if (permisos.editarTareas)
-                      IconButton(
-                        icon: Icon(
-                          _modoEdicion ? Icons.check_circle_rounded : Icons.edit_outlined,
-                          color: _modoEdicion ? verdeTurquesa : Colors.grey.shade700,
-                          size: 22,
-                        ),
-                        tooltip: _modoEdicion ? 'Guardar / Cancelar edición' : 'Editar tarea',
-                        onPressed: () => setState(() => _modoEdicion = !_modoEdicion),
-                      ),
-                    if (permisos.eliminarTareas)
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 22),
-                        tooltip: 'Eliminar tarea',
-                        onPressed: _confirmarEliminacion,
-                      ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded, color: Colors.grey, size: 22),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-
-            // --- TÍTULO DE LA TAREA ---
-            if (_modoEdicion)
-              TextFormField(
-                controller: _tituloController,
-                style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.bold, color: textoPrincipal),
-                decoration: InputDecoration(
-                  labelText: 'Título de la tarea *',
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  filled: true,
-                  fillColor: Colors.grey.shade50,
-                ),
-              )
-            else
-              Text(
-                _tituloController.text.trim().isNotEmpty ? _tituloController.text.trim() : 'Tarea sin título',
-                style: GoogleFonts.inter(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: textoPrincipal,
-                ),
-              ),
-            const SizedBox(height: 10),
-
-            // --- BARRA COMPACTA DE METADATOS (INSIGNIAS / CHIPS DESATURADAS) ---
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // --- BARRA SUPERIOR LIMPIA CON ACCIONES ---
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // 1. Badge Prioridad
+                  // Indicador de estado rápido / Columna compacta
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
                     decoration: BoxDecoration(
-                      color: colorPrioridad.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: colorPrioridad.withValues(alpha: 0.5)),
+                      color: azulCielo.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: azulCielo.withValues(alpha: 0.4)),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.flag_rounded, size: 13, color: colorPrioridad),
-                        const SizedBox(width: 4),
-                        Text(
-                          FormatoUtil.obtenerTextoPrioridad(_prioridadActual),
-                          style: TextStyle(color: colorPrioridad, fontSize: 11, fontWeight: FontWeight.bold),
-                        ),
-                      ],
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _columnaActual,
+                        isDense: true,
+                        icon: const Icon(Icons.arrow_drop_down_rounded, color: azulCielo, size: 20),
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: azulCielo),
+                        items: _columnasDisponibles.map((col) {
+                          return DropdownMenuItem(
+                            value: col,
+                            child: Text(col, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textoPrincipal)),
+                          );
+                        }).toList(),
+                        onChanged: (_procesando || !permisos.moverTareas) ? null : _cambiarEstadoRapido,
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 8),
 
-                  // 2. Badge Integrante(s) Asignado(s)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: _asignadosA.isNotEmpty ? azulCielo.withValues(alpha: 0.12) : (isDark ? const Color(0xFF182030) : Colors.grey.shade100),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: _asignadosA.isNotEmpty ? azulCielo.withValues(alpha: 0.4) : (isDark ? const Color(0xFF2D3748) : Colors.grey.shade300)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircleAvatar(
-                          radius: 9,
-                          backgroundColor: _asignadosA.isNotEmpty ? azulCielo : (isDark ? Colors.grey.shade700 : Colors.grey.shade400),
-                          child: Text(
-                            usuariosAsignados.isNotEmpty
-                                ? usuariosAsignados.first.nombreCompleto[0].toUpperCase()
-                                : (_asignadosA.isNotEmpty ? '${_asignadosA.length}' : '?'),
-                            style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                  Row(
+                    children: [
+                      if (permisos.editarTareas)
+                        IconButton(
+                          icon: Icon(
+                            _modoEdicion ? Icons.check_circle_rounded : Icons.edit_outlined,
+                            color: _modoEdicion ? verdeTurquesa : Colors.grey.shade700,
+                            size: 22,
                           ),
+                          tooltip: _modoEdicion ? 'Guardar / Cancelar edición' : 'Editar tarea',
+                          onPressed: () => setState(() => _modoEdicion = !_modoEdicion),
                         ),
-                        const SizedBox(width: 5),
-                        Text(
-                          textoAsignados,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: _asignadosA.isNotEmpty ? textoPrincipal : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
-                          ),
+                      if (permisos.eliminarTareas)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 22),
+                          tooltip: 'Eliminar tarea',
+                          onPressed: _confirmarEliminacion,
                         ),
-                      ],
-                    ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, color: Colors.grey, size: 22),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
+                ],
+              ),
+              const SizedBox(height: 6),
 
-                  // 3. Badge Fecha Entrega
-                  if (_fechaVencimiento != null || _modoEdicion)
+              // --- TÍTULO DE LA TAREA ---
+              if (_modoEdicion)
+                TextFormField(
+                  controller: _tituloController,
+                  style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.bold, color: textoPrincipal),
+                  decoration: InputDecoration(
+                    labelText: 'Título de la tarea *',
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                  ),
+                )
+              else
+                Text(
+                  _tituloController.text.trim().isNotEmpty ? _tituloController.text.trim() : 'Tarea sin título',
+                  style: GoogleFonts.inter(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: textoPrincipal,
+                  ),
+                ),
+              const SizedBox(height: 10),
+
+              // --- BARRA COMPACTA DE METADATOS (INSIGNIAS / CHIPS DESATURADAS) ---
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    // 1. Badge Prioridad
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: _fechaVencimiento != null ? Colors.amber.shade900.withValues(alpha: 0.2) : (isDark ? const Color(0xFF182030) : Colors.grey.shade100),
+                        color: colorPrioridad.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: _fechaVencimiento != null ? Colors.amber.shade400 : (isDark ? const Color(0xFF2D3748) : Colors.grey.shade300),
-                        ),
+                        border: Border.all(color: colorPrioridad.withValues(alpha: 0.5)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.calendar_today_rounded,
-                            size: 12,
-                            color: _fechaVencimiento != null ? Colors.amber.shade400 : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
-                          ),
+                          Icon(Icons.flag_rounded, size: 13, color: colorPrioridad),
                           const SizedBox(width: 4),
                           Text(
-                            _fechaVencimiento != null
-                                ? '${_fechaVencimiento!.day}/${_fechaVencimiento!.month}/${_fechaVencimiento!.year}'
-                                : 'Sin fecha',
+                            FormatoUtil.obtenerTextoPrioridad(_prioridadActual),
+                            style: TextStyle(color: colorPrioridad, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+
+                    // 2. Badge Integrante(s) Asignado(s)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: _asignadosA.isNotEmpty ? azulCielo.withValues(alpha: 0.12) : (isDark ? const Color(0xFF182030) : Colors.grey.shade100),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _asignadosA.isNotEmpty ? azulCielo.withValues(alpha: 0.4) : (isDark ? const Color(0xFF2D3748) : Colors.grey.shade300)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircleAvatar(
+                            radius: 9,
+                            backgroundColor: _asignadosA.isNotEmpty ? azulCielo : (isDark ? Colors.grey.shade700 : Colors.grey.shade400),
+                            child: Text(
+                              usuariosAsignados.isNotEmpty
+                                  ? usuariosAsignados.first.nombreCompleto[0].toUpperCase()
+                                  : (_asignadosA.isNotEmpty ? '${_asignadosA.length}' : '?'),
+                              style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            textoAsignados,
                             style: TextStyle(
                               fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: _fechaVencimiento != null ? Colors.amber.shade400 : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+                              fontWeight: FontWeight.w600,
+                              color: _asignadosA.isNotEmpty ? textoPrincipal : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
                             ),
                           ),
                         ],
                       ),
                     ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
+                    const SizedBox(width: 8),
 
-            // --- EN MODO EDICIÓN OCULTAMOS LA BARRA DE PESTAÑAS Y LOS COMENTARIOS ---
-            if (!_modoEdicion) ...[
-              TabBar(
-                labelColor: azulCielo,
-                unselectedLabelColor: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                indicatorColor: azulCielo,
-                indicatorWeight: 2.5,
-                labelStyle: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 12),
-                unselectedLabelStyle: GoogleFonts.inter(fontWeight: FontWeight.w500, fontSize: 12),
-                tabs: [
-                  const Tab(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.assignment_outlined, size: 15),
-                        SizedBox(width: 4),
-                        Text('Información'),
-                      ],
-                    ),
-                  ),
-                  Tab(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.forum_outlined, size: 15),
-                        const SizedBox(width: 4),
-                        Text('Comentarios (${_comentariosActuales.length})'),
-                      ],
-                    ),
-                  ),
-                  const Tab(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.sticky_note_2_outlined, size: 15),
-                        SizedBox(width: 4),
-                        Text('Notas'),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-            ],
-
-            // --- CONTENIDO DE LAS PESTAÑAS / MODO EDICIÓN DIRECCIÓN ÚNICA ---
-            Expanded(
-              child: _modoEdicion
-                  ? contenidoInfo
-                  : TabBarView(
-                      children: [
-                        // PESTAÑA 1: INFORMACIÓN GENERAL EN MODO LECTURA
-                        contenidoInfo,
-
-                        // PESTAÑA 2: COMENTARIOS Y RETROALIMENTACIÓN
-                        Column(
+                    // 3. Badge Fecha Entrega
+                    if (_fechaVencimiento != null || _modoEdicion)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: _fechaVencimiento != null ? Colors.amber.shade900.withValues(alpha: 0.2) : (isDark ? const Color(0xFF182030) : Colors.grey.shade100),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _fechaVencimiento != null ? Colors.amber.shade400 : (isDark ? const Color(0xFF2D3748) : Colors.grey.shade300),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Expanded(
-                              child: _comentariosActuales.isEmpty
-                                  ? Center(
-                                      child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Icon(Icons.forum_outlined, size: 42, color: Colors.grey.shade300),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            'No hay comentarios aún',
-                                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade600),
-                                          ),
-                                          Text(
-                                            'Escribe observaciones o retroalimentación para tu equipo.',
-                                            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                                          ),
-                                        ],
-                                      ),
-                                    )
-                                  : ListView.builder(
-                                      padding: const EdgeInsets.only(top: 8, bottom: 8),
-                                      itemCount: _comentariosActuales.length,
-                                      itemBuilder: (context, index) {
-                                        final com = _comentariosActuales[index];
-                                        final esMio = com.autorId == uid;
-                                        final esAdmin = widget.tablero?.esAdminOCreador(uid) ?? true;
-                                        final fechaTexto = FormatoUtil.formatearFechaHora(com.fechaCreacion);
-
-                                        return Container(
-                                          margin: const EdgeInsets.only(bottom: 8),
-                                          padding: const EdgeInsets.all(10),
-                                          decoration: BoxDecoration(
-                                            color: isDark ? const Color(0xFF182030) : Colors.grey.shade50,
-                                            borderRadius: BorderRadius.circular(12),
-                                            border: Border.all(color: isDark ? const Color(0xFF2D3748) : Colors.grey.shade200),
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Row(
-                                                children: [
-                                                  CircleAvatar(
-                                                    radius: 12,
-                                                    backgroundColor: azulCielo.withValues(alpha: 0.2),
-                                                    child: Text(
-                                                      com.autorNombre.isNotEmpty ? com.autorNombre[0].toUpperCase() : 'U',
-                                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: azulCielo),
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Expanded(
-                                                    child: Column(
-                                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                                      children: [
-                                                        Text(com.autorNombre, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: textoPrincipal)),
-                                                        Text(fechaTexto, style: TextStyle(fontSize: 9, color: Colors.grey.shade500)),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                  if (esMio || esAdmin)
-                                                    IconButton(
-                                                      icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.redAccent),
-                                                      onPressed: () => _eliminarComentario(index),
-                                                    ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 6),
-                                              Text(com.contenido, style: TextStyle(fontSize: 12, color: textoPrincipal, height: 1.3)),
-                                            ],
-                                          ),
-                                        );
-                                      },
-                                    ),
+                            Icon(
+                              Icons.calendar_today_rounded,
+                              size: 12,
+                              color: _fechaVencimiento != null ? Colors.amber.shade400 : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
                             ),
-
-                            // CAJA DE ENTRADA DE COMENTARIO
-                            Container(
-                              margin: const EdgeInsets.only(top: 8, bottom: 8),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: isDark ? const Color(0xFF182030) : Colors.white,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: isDark ? const Color(0xFF2D3748) : Colors.grey.shade300),
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: TextField(
-                                      controller: _comentarioController,
-                                      maxLines: null,
-                                      decoration: const InputDecoration(
-                                        hintText: 'Escribe un comentario...',
-                                        hintStyle: TextStyle(fontSize: 12, color: Colors.grey),
-                                        border: InputBorder.none,
-                                      ),
-                                      style: const TextStyle(fontSize: 12),
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: _enviandoComentario
-                                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: azulCielo))
-                                        : const Icon(Icons.send_rounded, color: azulCielo, size: 18),
-                                    onPressed: _enviandoComentario ? null : _agregarComentario,
-                                  ),
-                                ],
+                            const SizedBox(width: 4),
+                            Text(
+                              _fechaVencimiento != null
+                                  ? '${_fechaVencimiento!.day}/${_fechaVencimiento!.month}/${_fechaVencimiento!.year}'
+                                  : 'Sin fecha',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: _fechaVencimiento != null ? Colors.amber.shade400 : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
                               ),
                             ),
                           ],
                         ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
 
-                        // PESTAÑA 3: NOTAS PERSONALES VINCULADAS
-                        StreamBuilder<List<BorradorNota>>(
-                          stream: _firestoreService.escucharNotasDeTarea(widget.tarea.id),
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState == ConnectionState.waiting) {
-                              return const Center(child: CircularProgressIndicator(color: azulCielo));
-                            }
-                            final notas = snapshot.data ?? [];
+              // --- EN MODO EDICIÓN OCULTAMOS LA BARRA DE PESTAÑAS Y LOS COMENTARIOS ---
+              if (!_modoEdicion) ...[
+                TabBar(
+                  labelColor: azulCielo,
+                  unselectedLabelColor: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  indicatorColor: azulCielo,
+                  indicatorWeight: 2.5,
+                  labelStyle: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 12),
+                  unselectedLabelStyle: GoogleFonts.inter(fontWeight: FontWeight.w500, fontSize: 12),
+                  tabs: [
+                    // FittedBox(scaleDown): en teléfonos en vertical el texto de la pestaña
+                    // no cabía ("RIGHT OVERFLOWED"); ahora se reduce lo justo. Si hay
+                    // espacio (horizontal) se ve exactamente igual que antes.
+                    const Tab(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.assignment_outlined, size: 15),
+                            SizedBox(width: 4),
+                            Text('Información'),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Tab(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.forum_outlined, size: 15),
+                            const SizedBox(width: 4),
+                            Text('Comentarios (${_comentariosActuales.length})'),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const Tab(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.sticky_note_2_outlined, size: 15),
+                            SizedBox(width: 4),
+                            Text('Notas'),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+              ],
 
-                            return Column(
+              // --- CONTENIDO DE LAS PESTAÑAS / MODO EDICIÓN DIRECCIÓN ÚNICA ---
+              Expanded(
+                child: _modoEdicion
+                    ? contenidoInfo
+                    : TabBarView(
+                  children: [
+                    // PESTAÑA 1: INFORMACIÓN GENERAL EN MODO LECTURA
+                    contenidoInfo,
+
+                    // PESTAÑA 2: COMENTARIOS Y RETROALIMENTACIÓN
+                    Column(
+                      children: [
+                        Expanded(
+                          child: _comentariosActuales.isEmpty
+                              ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        'Notas Personales (${notas.length})',
-                                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: textoPrincipal),
-                                      ),
-                                      ElevatedButton.icon(
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: azulCielo,
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                          elevation: 0,
-                                        ),
-                                        icon: const Icon(Icons.add_rounded, size: 16, color: Colors.white),
-                                        label: const Text('Agregar Nota', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                                        onPressed: _crearNotaVinculadaDirecta,
-                                      ),
-                                    ],
-                                  ),
+                                Icon(Icons.forum_outlined, size: 42, color: Colors.grey.shade300),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'No hay comentarios aún',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade600),
                                 ),
-                                Expanded(
-                                  child: notas.isEmpty
-                                      ? Center(
-                                          child: Column(
-                                            mainAxisAlignment: MainAxisAlignment.center,
-                                            children: [
-                                              Icon(Icons.sticky_note_2_outlined, size: 42, color: Colors.grey.shade300),
-                                              const SizedBox(height: 8),
-                                              Text(
-                                                'No hay notas vinculadas a esta tarea',
-                                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade600),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                'Los integrantes pueden agregar notas personales sobre el avance de esta tarea.',
-                                                textAlign: TextAlign.center,
-                                                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                                              ),
-                                            ],
-                                          ),
-                                        )
-                                      : ListView.builder(
-                                          padding: const EdgeInsets.only(top: 6, bottom: 8),
-                                          itemCount: notas.length,
-                                          itemBuilder: (context, index) {
-                                            final nota = notas[index];
-                                            final colorVal = int.tryParse(nota.colorHex) ?? 0xFF52ABEB;
-                                            final colorBorder = Color(colorVal);
-
-                                            return Container(
-                                              margin: const EdgeInsets.only(bottom: 8),
-                                              padding: const EdgeInsets.all(12),
-                                              decoration: BoxDecoration(
-                                                color: theme.cardColor,
-                                                borderRadius: BorderRadius.circular(12),
-                                                border: Border.all(color: colorBorder.withValues(alpha: 0.5), width: 1.2),
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: Colors.black.withValues(alpha: 0.02),
-                                                    blurRadius: 4,
-                                                    offset: const Offset(0, 2),
-                                                  ),
-                                                ],
-                                              ),
-                                              child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  Row(
-                                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                    children: [
-                                                      Expanded(
-                                                        child: Text(
-                                                          nota.titulo,
-                                                          style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13, color: textoPrincipal),
-                                                        ),
-                                                      ),
-                                                      Row(
-                                                        children: [
-                                                          Text(
-                                                            FormatoUtil.formatearFechaHora(nota.fechaCreacion),
-                                                            style: TextStyle(fontSize: 9, color: Colors.grey.shade500),
-                                                          ),
-                                                          if (nota.usuarioId == uid)
-                                                            IconButton(
-                                                              icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.redAccent),
-                                                              onPressed: () => _firestoreService.eliminarBorradorNota(nota.id),
-                                                            ),
-                                                        ],
-                                                      ),
-                                                    ],
-                                                  ),
-                                                  if (nota.contenido.isNotEmpty) ...[
-                                                    const SizedBox(height: 4),
-                                                    Text(
-                                                      nota.contenido,
-                                                      style: TextStyle(fontSize: 12, color: textoPrincipal, height: 1.3),
-                                                    ),
-                                                  ],
-                                                ],
-                                              ),
-                                            );
-                                          },
-                                        ),
+                                Text(
+                                  'Escribe observaciones o retroalimentación para tu equipo.',
+                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                                 ),
                               ],
-                            );
-                          },
+                            ),
+                          )
+                              : ListView.builder(
+                            padding: const EdgeInsets.only(top: 8, bottom: 8),
+                            itemCount: _comentariosActuales.length,
+                            itemBuilder: (context, index) {
+                              final com = _comentariosActuales[index];
+                              final esMio = com.autorId == uid;
+                              final esAdmin = widget.tablero?.esAdminOCreador(uid) ?? true;
+                              final fechaTexto = FormatoUtil.formatearFechaHora(com.fechaCreacion);
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: isDark ? const Color(0xFF182030) : Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: isDark ? const Color(0xFF2D3748) : Colors.grey.shade200),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 12,
+                                          backgroundColor: azulCielo.withValues(alpha: 0.2),
+                                          child: Text(
+                                            com.autorNombre.isNotEmpty ? com.autorNombre[0].toUpperCase() : 'U',
+                                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: azulCielo),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(com.autorNombre, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: textoPrincipal)),
+                                              Text(fechaTexto, style: TextStyle(fontSize: 9, color: Colors.grey.shade500)),
+                                            ],
+                                          ),
+                                        ),
+                                        if (esMio || esAdmin)
+                                          IconButton(
+                                            icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.redAccent),
+                                            onPressed: () => _eliminarComentario(index),
+                                          ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(com.contenido, style: TextStyle(fontSize: 12, color: textoPrincipal, height: 1.3)),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+
+                        // CAJA DE ENTRADA DE COMENTARIO
+                        Container(
+                          margin: const EdgeInsets.only(top: 8, bottom: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF182030) : Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: isDark ? const Color(0xFF2D3748) : Colors.grey.shade300),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _comentarioController,
+                                  maxLines: null,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Escribe un comentario...',
+                                    hintStyle: TextStyle(fontSize: 12, color: Colors.grey),
+                                    border: InputBorder.none,
+                                  ),
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ),
+                              IconButton(
+                                icon: _enviandoComentario
+                                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: azulCielo))
+                                    : const Icon(Icons.send_rounded, color: azulCielo, size: 18),
+                                onPressed: _enviandoComentario ? null : _agregarComentario,
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
-            ),
-          ],
+
+                    // PESTAÑA 3: NOTAS PERSONALES VINCULADAS
+                    StreamBuilder<List<BorradorNota>>(
+                      stream: _firestoreService.escucharNotasDeTarea(widget.tarea.id),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(child: CircularProgressIndicator(color: azulCielo));
+                        }
+                        final notas = snapshot.data ?? [];
+
+                        return Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Notas Personales (${notas.length})',
+                                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: textoPrincipal),
+                                  ),
+                                  ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: azulCielo,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      elevation: 0,
+                                    ),
+                                    icon: const Icon(Icons.add_rounded, size: 16, color: Colors.white),
+                                    label: const Text('Agregar Nota', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                    onPressed: _crearNotaVinculadaDirecta,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Expanded(
+                              child: notas.isEmpty
+                                  ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.sticky_note_2_outlined, size: 42, color: Colors.grey.shade300),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'No hay notas vinculadas a esta tarea',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade600),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Los integrantes pueden agregar notas personales sobre el avance de esta tarea.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                                    ),
+                                  ],
+                                ),
+                              )
+                                  : ListView.builder(
+                                padding: const EdgeInsets.only(top: 6, bottom: 8),
+                                itemCount: notas.length,
+                                itemBuilder: (context, index) {
+                                  final nota = notas[index];
+                                  final colorVal = int.tryParse(nota.colorHex) ?? 0xFF52ABEB;
+                                  final colorBorder = Color(colorVal);
+
+                                  return Container(
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: theme.cardColor,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: colorBorder.withValues(alpha: 0.5), width: 1.2),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.02),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                nota.titulo,
+                                                style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13, color: textoPrincipal),
+                                              ),
+                                            ),
+                                            Row(
+                                              children: [
+                                                Text(
+                                                  FormatoUtil.formatearFechaHora(nota.fechaCreacion),
+                                                  style: TextStyle(fontSize: 9, color: Colors.grey.shade500),
+                                                ),
+                                                if (nota.usuarioId == uid)
+                                                  IconButton(
+                                                    icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.redAccent),
+                                                    onPressed: () => _firestoreService.eliminarBorradorNota(nota.id),
+                                                  ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                        if (nota.contenido.isNotEmpty) ...[
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            nota.contenido,
+                                            style: TextStyle(fontSize: 12, color: textoPrincipal, height: 1.3),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 
@@ -1153,7 +1176,7 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al seleccionar archivo: $e')),
+          SnackBar(content: Text(MensajesError.desde(e, accion: 'seleccionar el archivo'))),
         );
       }
     }
@@ -1279,7 +1302,7 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
       if (mounted) {
         setState(() => _procesando = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al mover tarea: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(MensajesError.desde(e, accion: 'mover la tarea')), backgroundColor: Colors.red),
         );
       }
     }
@@ -1338,7 +1361,7 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
       if (mounted) {
         setState(() => _procesando = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al guardar cambios: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(MensajesError.desde(e, accion: 'guardar los cambios de la tarea')), backgroundColor: Colors.red),
         );
       }
     }
@@ -1373,7 +1396,7 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
                 if (mounted) {
                   setState(() => _procesando = false);
                   sca.showSnackBar(
-                    SnackBar(content: Text('Error al eliminar: $e')),
+                    SnackBar(content: Text(MensajesError.desde(e, accion: 'eliminar la tarea'))),
                   );
                 }
               }
@@ -1434,7 +1457,7 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
       if (mounted) {
         setState(() => _enviandoComentario = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al publicar comentario: $e')),
+          SnackBar(content: Text(MensajesError.desde(e, accion: 'publicar el comentario'))),
         );
       }
     }
@@ -1460,7 +1483,7 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al eliminar comentario: $e')),
+          SnackBar(content: Text(MensajesError.desde(e, accion: 'eliminar el comentario'))),
         );
       }
     }

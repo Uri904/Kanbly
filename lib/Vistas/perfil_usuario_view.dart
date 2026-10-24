@@ -1,22 +1,19 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../controlador/auth_controller.dart';
 import '../modelo/invitacion.dart';
+import '../modelo/resumen_tableros.dart';
 import '../modelo/tablero.dart';
-import '../modelo/tarea.dart';
 import '../servicios/firestore_service.dart';
-import 'editar_perfil_view.dart';
-import 'login_view.dart';
+import '../utilerias/mensajes_error.dart';
+import 'informacion_tableros_section.dart';
+import 'kanban_board_widget.dart';
+
 
 // ✅ COLORES OFICIALES DE KANBLY (mismos de login/registro)
 const Color _azulCielo = Color(0xFF52ABEB);
 const Color _verdeTurquesa = Color(0xFF63D0A1);
-const Color _verdeAgua = Color(0xFF63B09C);
-const Color _blanco = Color(0xFFFCFDFD);
-const Color _grisOscuro = Color(0xFF1E293B);
 
 class PerfilUsuarioView extends StatefulWidget {
   const PerfilUsuarioView({super.key});
@@ -29,8 +26,13 @@ class _PerfilUsuarioViewState extends State<PerfilUsuarioView> {
   final FirestoreService _firestoreService = FirestoreService();
 
   List<Tablero> _tableros = [];
-  List<Tarea> _tareas = [];
+  ResumenActividadTareas? _actividad;
   bool _cargando = true;
+  bool _errorCarga = false;
+  bool _errorNotificacionesRegistrado = false;
+  String? _mensajeErrorNotificaciones;
+  String _mensajeCargaError =
+      'No pudimos cargar tu resumen. Inténtalo de nuevo.';
 
   @override
   void initState() {
@@ -40,22 +42,35 @@ class _PerfilUsuarioViewState extends State<PerfilUsuarioView> {
 
   Future<void> _cargarDatos() async {
     try {
-      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) {
+        throw StateError('La sesión ya no está disponible.');
+      }
       final tableros = await _firestoreService.obtenerTablerosDeUsuario(uid);
-      final tareas = await _firestoreService.obtenerTareasCreadasPorUsuario(uid);
+      final tareas = await _firestoreService.obtenerTareasCreadasPorUsuario(
+        uid,
+      );
 
       if (!mounted) return;
       setState(() {
         _tableros = tableros;
-        _tareas = tareas;
+        _actividad = ResumenActividadTareas.desde(tareas, tableros: tableros);
         _cargando = false;
+        _errorCarga = false;
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (!mounted) return;
-      setState(() => _cargando = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo cargar tu actividad: $e')),
-      );
+      setState(() {
+        _cargando = false;
+        _errorCarga = true;
+        _mensajeCargaError =
+        'No se pudo cargar tu actividad. Revisa tu conexión e inténtalo de nuevo.';
+        _mensajeCargaError = MensajesError.desde(
+          e,
+          accion: 'cargar tu actividad',
+          stackTrace: stackTrace,
+        );
+      });
     }
   }
 
@@ -66,13 +81,19 @@ class _PerfilUsuarioViewState extends State<PerfilUsuarioView> {
     final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     return Scaffold(
-      backgroundColor: _blanco,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(60),
         child: AppBar(
           title: const Text(
-            'Mi Perfil',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 18),
+            'Información de tableros',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+              fontSize: 18,
+            ),
           ),
           flexibleSpace: Container(
             decoration: const BoxDecoration(
@@ -85,125 +106,105 @@ class _PerfilUsuarioViewState extends State<PerfilUsuarioView> {
           ),
           elevation: 0,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+            icon: const Icon(
+              Icons.arrow_back_ios,
+              color: Colors.white,
+              size: 20,
+            ),
             onPressed: () => Navigator.pop(context),
           ),
         ),
       ),
       body: usuario == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: Text('Inicia sesión para consultar tu perfil.'))
           : RefreshIndicator(
         onRefresh: _cargarDatos,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _tarjetaDatosPersonales(usuario.nombreCompleto, usuario.email, usuario.rol, usuario.fechaRegistro),
-              const SizedBox(height: 24),
-              _tituloSeccion('Mis Tableros'),
-              const SizedBox(height: 10),
-              _cargando ? _cargandoMini() : _seccionTableros(uid),
-              const SizedBox(height: 24),
-              _tituloSeccion('Progreso de Tareas'),
-              const SizedBox(height: 10),
-              _cargando ? _cargandoMini() : _seccionProgreso(),
-              const SizedBox(height: 24),
-              _tituloSeccion('Notificaciones'),
-              const SizedBox(height: 10),
-              _seccionNotificaciones(uid),
-              const SizedBox(height: 32),
-              _botonEliminarCuenta(authController),
-              const SizedBox(height: 16),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+        child: LayoutBuilder(
+          builder: (context, _) => SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(
+              20,
+              20,
+              20,
+              28 + MediaQuery.of(context).padding.bottom,
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 640),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _tituloSeccion('Resumen de tus espacios'),
+                    const SizedBox(height: 10),
+                    if (_cargando)
+                      _cargandoMini()
+                    else if (_errorCarga)
+                      _tarjetaReintentar()
+                    else
+                      InformacionTablerosSection(
+                        resumen: ResumenTableros.desde(_tableros, uid),
+                      ),
+                    const SizedBox(height: 20),
+                    _tituloSeccion('Tu actividad'),
+                    const SizedBox(height: 10),
+                    if (_cargando)
+                      _cargandoMini()
+                    else if (!_errorCarga && _actividad != null)
+                      ActividadTareasSection(actividad: _actividad!),
+                    const SizedBox(height: 22),
+                    _tituloSeccion('Tus tableros'),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Toca un tablero para abrirlo. El detalle de columnas y tareas está en la pantalla principal.',
+                      style: TextStyle(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    if (_cargando)
+                      _cargandoMini()
+                    else if (!_errorCarga)
+                      MisTablerosDetalle(
+                        resumen: ResumenTableros.desde(_tableros, uid),
+                        onTapTablero: _abrirTablero,
+                      ),
+                    const SizedBox(height: 22),
+                    _tituloSeccion('Notificaciones'),
+                    const SizedBox(height: 10),
+                    _seccionNotificaciones(uid),
 
-  // ---------- TARJETA SUPERIOR: DATOS PERSONALES (editable) ----------
-  Widget _tarjetaDatosPersonales(String nombre, String email, String rol, DateTime fechaRegistro) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [_azulCielo, _verdeTurquesa],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        children: [
-          const CircleAvatar(
-            radius: 36,
-            backgroundColor: Colors.white,
-            child: Icon(Icons.person, color: _azulCielo, size: 40),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            nombre,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            email,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Color(0xDEFFFFFF), fontSize: 13),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 8,
-            children: [
-              _etiquetaBlanca(rol[0].toUpperCase() + rol.substring(1)),
-              _etiquetaBlanca('Desde ${DateFormat('dd/MM/yyyy').format(fechaRegistro)}'),
-            ],
-          ),
-          const SizedBox(height: 18),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const EditarPerfilView()),
-                );
-              },
-              style: OutlinedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: _grisOscuro,
-                side: BorderSide.none,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                  ],
+                ),
               ),
-              icon: const Icon(Icons.edit_outlined, size: 18),
-              label: const Text('Editar datos personales', style: TextStyle(fontWeight: FontWeight.w600)),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _etiquetaBlanca(String texto) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(20),
+  void _abrirTablero(InfoTableroUsuario info) {
+    final indice = _tableros.indexWhere((item) => item.id == info.id);
+    if (indice < 0) return;
+    final tablero = _tableros[indice];
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => KanbanBoardWidget(tablero: tablero),
       ),
-      child: Text(texto, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
     );
   }
 
   Widget _tituloSeccion(String titulo) {
     return Text(
       titulo,
-      style: const TextStyle(color: _grisOscuro, fontSize: 16, fontWeight: FontWeight.bold),
+      style: TextStyle(
+        color: Theme.of(context).colorScheme.onSurface,
+        fontSize: 16,
+        fontWeight: FontWeight.bold,
+      ),
     );
   }
 
@@ -212,83 +213,34 @@ class _PerfilUsuarioViewState extends State<PerfilUsuarioView> {
     child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
   );
 
-  // ---------- SECCIÓN: TABLEROS (solo informativo, sin editar/eliminar) ----------
-  Widget _seccionTableros(String uid) {
-    if (_tableros.isEmpty) {
-      return _tarjetaVacia('Aún no participas en ningún tablero.');
-    }
-    return Column(
-      children: _tableros.map((t) {
-        final esCreador = t.creadorId == uid;
-        return Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade200),
+  Widget _tarjetaReintentar() {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.orange.withOpacity(.35)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off_outlined, color: _azulCielo),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _mensajeCargaError,
+              style: TextStyle(color: theme.colorScheme.onSurface),
+            ),
           ),
-          child: Row(
-            children: [
-              Icon(
-                t.esGrupal ? Icons.groups_rounded : Icons.person_outline_rounded,
-                color: t.esGrupal ? _azulCielo : _verdeTurquesa,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(t.nombre, style: const TextStyle(fontWeight: FontWeight.bold, color: _grisOscuro)),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${t.esGrupal ? "Equipo" : "Individual"} · ${esCreador ? "Creador" : "Miembro"}',
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          IconButton(
+            tooltip: 'Reintentar',
+            onPressed: () {
+              setState(() => _cargando = true);
+              _cargarDatos();
+            },
+            icon: const Icon(Icons.refresh_rounded),
           ),
-        );
-      }).toList(),
-    );
-  }
-
-  // ---------- SECCIÓN: PROGRESO DE TAREAS (solo informativo) ----------
-  Widget _seccionProgreso() {
-    if (_tareas.isEmpty) {
-      return _tarjetaVacia('Todavía no has creado ninguna tarea.');
-    }
-    final completadas = _tareas.where((t) => t.estado == EstadoTarea.completada).length;
-    final enProgreso = _tareas.where((t) => t.estado == EstadoTarea.enProgreso).length;
-    final pendientes = _tareas.where((t) => t.estado == EstadoTarea.pendiente).length;
-
-    return Row(
-      children: [
-        _estadistica('Creadas', _tareas.length, _grisOscuro),
-        const SizedBox(width: 8),
-        _estadistica('Pendientes', pendientes, _grisOscuro),
-        const SizedBox(width: 8),
-        _estadistica('En progreso', enProgreso, _verdeAgua),
-        const SizedBox(width: 8),
-        _estadistica('Hechas', completadas, _verdeTurquesa),
-      ],
-    );
-  }
-
-  Widget _estadistica(String etiqueta, int valor, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
-        child: Column(
-          children: [
-            Text('$valor', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 2),
-            Text(etiqueta, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 9)),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -301,6 +253,16 @@ class _PerfilUsuarioViewState extends State<PerfilUsuarioView> {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _cargandoMini();
         }
+        if (snapshot.hasError) {
+
+              _mensajeErrorNotificaciones ??= MensajesError.desde(
+                snapshot.error,
+                accion: 'cargar tus notificaciones',
+              );
+              return _tarjetaVacia(_mensajeErrorNotificaciones!);
+        }
+        _errorNotificacionesRegistrado = false;
+        _mensajeErrorNotificaciones = null;
         final invitaciones = snapshot.data ?? [];
         if (invitaciones.isEmpty) {
           return _tarjetaVacia('No tienes notificaciones pendientes.');
@@ -322,7 +284,10 @@ class _PerfilUsuarioViewState extends State<PerfilUsuarioView> {
                   Expanded(
                     child: Text(
                       'Invitación pendiente al tablero "${inv.tableroNombre}"',
-                      style: const TextStyle(fontSize: 13, color: _grisOscuro),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
                     ),
                   ),
                 ],
@@ -338,113 +303,24 @@ class _PerfilUsuarioViewState extends State<PerfilUsuarioView> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(12)),
-      child: Text(mensaje, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-    );
-  }
-
-  // ---------- ZONA DE PELIGRO: ELIMINAR CUENTA ----------
-  Widget _botonEliminarCuenta(AuthController authController) {
-    return OutlinedButton.icon(
-      onPressed: () => _confirmarEliminarCuenta(authController),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: Colors.redAccent,
-        side: const BorderSide(color: Colors.redAccent),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? const Color(0xFF2D3748)
+              : Colors.grey.shade200,
+        ),
       ),
-      icon: const Icon(Icons.delete_forever_outlined),
-      label: const Text('Eliminar mi cuenta', style: TextStyle(fontWeight: FontWeight.bold)),
-    );
-  }
-
-  void _confirmarEliminarCuenta(AuthController authController) {
-    final passwordController = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-    bool eliminando = false;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('¿Eliminar tu cuenta?', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Esta acción es permanente: se borrarán tus datos y no podrás recuperar tu cuenta. '
-                      'Confirma tu contraseña para continuar.',
-                  style: TextStyle(fontSize: 13),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: passwordController,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: 'Contraseña',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  validator: (v) => (v == null || v.isEmpty) ? 'Ingresa tu contraseña' : null,
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: eliminando ? null : () => Navigator.pop(dialogContext),
-              child: Text('Cancelar', style: TextStyle(color: Colors.grey[600])),
-            ),
-            ElevatedButton(
-              onPressed: eliminando
-                  ? null
-                  : () async {
-                if (!(formKey.currentState?.validate() ?? false)) return;
-                setDialogState(() => eliminando = true);
-
-                final navigator = Navigator.of(context);
-                final messenger = ScaffoldMessenger.of(context);
-
-                final exito = await authController.eliminarCuenta(passwordController.text);
-
-                if (!dialogContext.mounted) return;
-                Navigator.pop(dialogContext); // cierra el diálogo
-
-                if (exito) {
-                  navigator.pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (context) => const LoginView()),
-                        (route) => false,
-                  );
-                  messenger.showSnackBar(
-                    const SnackBar(
-                      content: Text('Tu cuenta fue eliminada correctamente'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                } else {
-                  final mensaje = authController.errorMessage ?? 'No se pudo eliminar la cuenta';
-                  authController.clearError();
-                  messenger.showSnackBar(
-                    SnackBar(content: Text(mensaje), backgroundColor: Colors.red),
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-              child: eliminando
-                  ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-              )
-                  : const Text('Eliminar', style: TextStyle(color: Colors.white)),
-            ),
-          ],
+      child: Text(
+        mensaje,
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          fontSize: 13,
         ),
       ),
     );
   }
+
+
 }

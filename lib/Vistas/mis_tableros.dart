@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../modelo/tablero.dart';
 import '../servicios/firestore_service.dart';
 import '../modelo/tarea.dart';
+import '../utilerias/mensajes_error.dart';
 
 class MisTableros extends StatefulWidget {
   const MisTableros({super.key});
@@ -27,27 +28,30 @@ class _MisTablerosState extends State<MisTableros> {
 
     try {
 
-      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) {
+        throw const KanblyException(MensajesError.mensajeSesionExpirada);
+      }
 
       final tableros =
       await _firestoreService.obtenerTablerosDeUsuario(uid);
 
+      if (!mounted) return;
       setState(() {
         _tableros = tableros;
         _cargando = false;
       });
 
     } catch (e) {
-
-      print("ERROR REAL TABLEROS: $e");
+      if (!mounted) return;
 
       setState(() {
         _cargando = false;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-         SnackBar(
-          content: Text("$e"),
+        SnackBar(
+          content: Text(MensajesError.desde(e, accion: 'cargar tus tableros')),
         ),
       );
 
@@ -63,6 +67,10 @@ class _MisTablerosState extends State<MisTableros> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // RESPONSIVO: en horizontal la altura útil es poca; se compacta el
+    // encabezado para dejar espacio a la cuadrícula (en vertical no cambia).
+    final bool horizontal =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
 
     return Scaffold(
       key: _scaffoldKey,
@@ -81,7 +89,7 @@ class _MisTablerosState extends State<MisTableros> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 12),
+          SizedBox(height: horizontal ? 6 : 12),
 
           // --- BARRA DE PESTAÑAS ---
           Padding(
@@ -116,22 +124,23 @@ class _MisTablerosState extends State<MisTableros> {
             ),
           ),
 
-          const SizedBox(height: 20),
+          SizedBox(height: horizontal ? 8 : 20),
 
-          // --- TÍTULO DE LA SECCIÓN ---
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Text(
-              'Mis Tableros',
-              style: TextStyle(
-                color: theme.colorScheme.onSurface,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+          // --- TÍTULO DE LA SECCIÓN (se oculta en horizontal para ganar espacio) ---
+          if (!horizontal) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Text(
+                'Mis Tableros',
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
-          ),
-
-          const SizedBox(height: 14),
+            const SizedBox(height: 14),
+          ],
 
           // --- ESPACIO DINÁMICO DE TABLEROS ---
           Expanded(
@@ -247,11 +256,15 @@ class _MisTablerosState extends State<MisTableros> {
       }
 
       return Center(
-        child: Text(
-          mensaje,
-          style: const TextStyle(
-            color: Colors.grey,
-            fontSize: 14,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Text(
+            mensaje,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.grey,
+              fontSize: 14,
+            ),
           ),
         ),
       );
@@ -261,8 +274,11 @@ class _MisTablerosState extends State<MisTableros> {
       onRefresh: _cargarTableros,
       child: GridView.builder(
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
+        // RESPONSIVO: antes eran siempre 2 columnas; en horizontal las tarjetas
+        // se volvían enormes. Ahora el número de columnas se adapta al ancho
+        // (2 en teléfono vertical, igual que antes).
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 240,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
           childAspectRatio: 0.85,
@@ -454,65 +470,73 @@ class _MisTablerosState extends State<MisTableros> {
   void _mostrarOpcionesCreacion(BuildContext context) {
     showModalBottomSheet(
       context: context,
+      // isScrollControlled + scroll: en horizontal la hoja ya no cabe en la
+      // altura por defecto y se desbordaba ("BOTTOM OVERFLOWED"). En vertical
+      // se ve igual porque la hoja mide solo lo que ocupa su contenido.
+      isScrollControlled: true,
       backgroundColor: Theme.of(context).cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Crear Nuevo Tablero',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurface,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Selecciona el tipo de tablero que deseas maquetar:',
-                style: TextStyle(color: Colors.grey, fontSize: 13),
-              ),
-              const SizedBox(height: 20),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF63D0A1).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
+        return SafeArea(
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Crear Nuevo Tablero',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                  child: const Icon(Icons.person_outline_rounded, color: Color(0xFF63D0A1)),
-                ),
-                title: const Text('Tablero Individual', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('Para organizar tus tareas personales de forma privada.'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _redirigirAFormulario(esGrupal: false);
-                },
-              ),
-              const Divider(),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF52ABEB).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Selecciona el tipo de tablero que deseas maquetar:',
+                    style: TextStyle(color: Colors.grey, fontSize: 13),
                   ),
-                  child: const Icon(Icons.groups_outlined, color: Color(0xFF52ABEB)),
-                ),
-                title: const Text('Tablero en Equipo', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('Colabora con otros miembros en tiempo real.'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _redirigirAFormulario(esGrupal: true);
-                },
+                  const SizedBox(height: 20),
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF63D0A1).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.person_outline_rounded, color: Color(0xFF63D0A1)),
+                    ),
+                    title: const Text('Tablero Individual', style: TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: const Text('Para organizar tus tareas personales de forma privada.'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _redirigirAFormulario(esGrupal: false);
+                    },
+                  ),
+                  const Divider(),
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF52ABEB).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.groups_outlined, color: Color(0xFF52ABEB)),
+                    ),
+                    title: const Text('Tablero en Equipo', style: TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: const Text('Colabora con otros miembros en tiempo real.'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _redirigirAFormulario(esGrupal: true);
+                    },
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         );
       },
@@ -530,7 +554,7 @@ class _MisTablerosState extends State<MisTableros> {
       ),
     );
 
-      _cargarTableros();
+    _cargarTableros();
 
   }
   Future<void> _confirmarEliminar(Tablero tablero) async {
@@ -573,7 +597,15 @@ class _MisTablerosState extends State<MisTableros> {
     );
 
     if (confirmar == true) {
-      await _firestoreService.eliminarTablero(tablero.id);
+      try {
+        await _firestoreService.eliminarTablero(tablero.id);
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(MensajesError.desde(e, accion: 'eliminar el tablero'))),
+        );
+        return;
+      }
       _cargarTableros();
     }
   }
@@ -603,7 +635,7 @@ class _MisTablerosState extends State<MisTableros> {
 
     _cargarTableros();
   }
-  /* Si eligió Individual:
+/* Si eligió Individual:
   Navigator.push(
   context,
   MaterialPageRoute(builder: (context) => FormularioTablero(esGrupal: false)),
