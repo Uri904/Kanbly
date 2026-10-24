@@ -21,6 +21,7 @@ import '../utilerias/formato_util.dart';
 import '../utilerias/kanban_utils.dart';
 import 'calendario_tablero.dart';
 import 'recordatorios.dart';
+import '../utilerias/mensajes_error.dart';
 // ==========================================
 // 1. PANTALLA PRINCIPAL: TABLERO KANBAN
 // ==========================================
@@ -43,6 +44,11 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final bool isDark = theme.brightness == Brightness.dark;
+    // RESPONSIVO: en horizontal se reducen los espacios verticales del
+    // encabezado para que las columnas tengan altura útil.
+    final bool horizontal =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+    final double ancho = MediaQuery.sizeOf(context).width;
 
     // Colores oficiales adaptados de la paleta institucional de Kanbly
     const Color azulCielo = Color(0xFF52ABEB);
@@ -99,29 +105,33 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
             body: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 16),
+                SizedBox(height: horizontal ? 4 : 16),
 
                 // --- CABECERA DE LA VISTA DEL TABLERO ---
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  child: Row(
-                    children: [
-                      Icon(
-                        esGrupal ? Icons.groups_rounded : Icons.person_outline_rounded,
-                        color: colorAcento,
-                        size: 28,
+                  // En teléfonos de 320 dp los 5 botones de la cabecera no cabían
+                  // con 24 dp de margen y desbordaban la fila.
+                  padding: EdgeInsets.symmetric(horizontal: ancho < 360 ? 12.0 : 24.0),
+                  child: Builder(builder: (context) {
+                    // Icono y nombre del tablero (se reutilizan en ambos diseños).
+                    final Widget iconoTablero = Icon(
+                      esGrupal ? Icons.groups_rounded : Icons.person_outline_rounded,
+                      color: colorAcento,
+                      size: 28,
+                    );
+                    final Widget textoNombre = Text(
+                      nombreTablero,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          nombreTablero,
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurface,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
+                    );
+
+                    // Botones de acción del tablero (misma lógica y permisos de siempre).
+                    final List<Widget> acciones = [
                       // --- BOTÓN ASISTENTE IA POR VOZ ---
                       if (tableroActivo != null && permisos.crearTareas)
                         IconButton(
@@ -236,10 +246,44 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                           ),
                         ],
                       ),
-                    ],
-                  ),
+                    ];
+
+                    // RESPONSIVO (vertical en teléfono): con hasta 5 botones al lado
+                    // el nombre quedaba reducido a unas letras por renglón. Ahora el
+                    // nombre ocupa todo el ancho arriba y los botones van debajo,
+                    // alineados a la derecha. En horizontal / pantallas anchas se
+                    // conserva la fila única de siempre.
+                    if (ancho < 520) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              iconoTablero,
+                              const SizedBox(width: 10),
+                              Expanded(child: textoNombre),
+                            ],
+                          ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: acciones,
+                          ),
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      children: [
+                        iconoTablero,
+                        const SizedBox(width: 10),
+                        Expanded(child: textoNombre),
+                        ...acciones,
+                      ],
+                    );
+                  }),
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: horizontal ? 4 : 16),
 
                 // --- COLUMNAS KANBAN EN TIEMPO REAL CON FIRESTORE ---
                 Expanded(
@@ -253,7 +297,15 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
 
                       // B. Manejo de errores
                       if (snapshot.hasError) {
-                        return Center(child: Text('Error al cargar tareas: ${snapshot.error}'));
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Text(
+                              MensajesError.desde(snapshot.error, accion: 'cargar las tareas'),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        );
                       }
 
                       // C. Lista de tareas en vivo desde la nube
@@ -289,34 +341,40 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                         Color(0xFF10B981), // Esmeralda
                       ];
 
-                      return SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: columnasList.asMap().entries.map((entry) {
-                            final index = entry.key;
-                            final colNombre = entry.value;
+                      // LayoutBuilder: la altura de las columnas se calcula con el
+                      // espacio realmente disponible (antes dependía de la altura
+                      // total de la pantalla y fallaba en horizontal).
+                      return LayoutBuilder(
+                        builder: (context, viewport) => SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: columnasList.asMap().entries.map((entry) {
+                              final index = entry.key;
+                              final colNombre = entry.value;
 
-                            // BÚSQUEDA ROBUSTA Y GARANTÍA CERO PÉRDIDA DE TAREAS
-                            final tareasColumna = todasLasTareas.where((t) {
-                              return KanbanUtils.correspondeAColumna(t, colNombre, columnasList, index);
-                            }).toList();
+                              // BÚSQUEDA ROBUSTA Y GARANTÍA CERO PÉRDIDA DE TAREAS
+                              final tareasColumna = todasLasTareas.where((t) {
+                                return KanbanUtils.correspondeAColumna(t, colNombre, columnasList, index);
+                              }).toList();
 
-                            final colorHeader = paletaColoresHeaders[index % paletaColoresHeaders.length];
+                              final colorHeader = paletaColoresHeaders[index % paletaColoresHeaders.length];
 
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 16),
-                              child: _construirColumna(
-                                titulo: colNombre.toUpperCase(),
-                                estadoNombre: colNombre,
-                                tareas: tareasColumna,
-                                colorHeader: colorHeader,
-                                tablero: tableroActivo,
-                                permisos: permisos,
-                              ),
-                            );
-                          }).toList(),
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 16),
+                                child: _construirColumna(
+                                  titulo: colNombre.toUpperCase(),
+                                  estadoNombre: colNombre,
+                                  tareas: tareasColumna,
+                                  colorHeader: colorHeader,
+                                  tablero: tableroActivo,
+                                  permisos: permisos,
+                                  alturaDisponible: viewport.maxHeight - 16,
+                                ),
+                              );
+                            }).toList(),
+                          ),
                         ),
                       );
                     },
@@ -340,6 +398,7 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
     required Color colorHeader,
     required Tablero? tablero,
     required PermisosMiembro permisos,
+    double? alturaDisponible,
   }) {
     return DragTarget<Tarea>(
       onAcceptWithDetails: (details) async {
@@ -381,7 +440,7 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
           } catch (e) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Error al mover tarea: $e')),
+                SnackBar(content: Text(MensajesError.desde(e, accion: 'mover la tarea'))),
               );
             }
           }
@@ -391,13 +450,21 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
         final theme = Theme.of(context);
         final bool isDark = theme.brightness == Brightness.dark;
         final isHovered = candidateData.isNotEmpty;
-        final double maxHeight = MediaQuery.of(context).size.height - 220;
+        final bool horizontal =
+            MediaQuery.orientationOf(context) == Orientation.landscape;
+        final double maxHeightOriginal = MediaQuery.of(context).size.height - 220;
+        // Vertical: se conserva exactamente el cálculo original.
+        // Horizontal: se usa la altura real disponible (si no, la columna de
+        // 500 dp se desbordaba / quedaba cortada).
+        final double alturaMax = (horizontal && alturaDisponible != null)
+            ? (alturaDisponible < 120 ? 120.0 : alturaDisponible)
+            : (maxHeightOriginal > 300 ? maxHeightOriginal : 500);
 
         return Container(
           width: 280,
           constraints: BoxConstraints(
-            minHeight: 200,
-            maxHeight: maxHeight > 300 ? maxHeight : 500,
+            minHeight: alturaMax < 200 ? alturaMax : 200,
+            maxHeight: alturaMax,
           ),
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
@@ -425,80 +492,80 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
               Expanded(
                 child: tareas.isEmpty
                     ? Container(
-                        height: 100,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: isHovered ? colorHeader : (isDark ? const Color(0xFF2D3748) : Colors.grey.shade300),
-                            style: BorderStyle.none,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          isHovered ? 'Soltar aquí' : 'Sin tareas en esta columna',
-                          style: TextStyle(
-                            color: isHovered ? colorHeader : Colors.grey.shade400,
-                            fontWeight: isHovered ? FontWeight.bold : FontWeight.normal,
-                            fontSize: 12,
-                          ),
-                        ),
-                      )
+                  height: 100,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: isHovered ? colorHeader : (isDark ? const Color(0xFF2D3748) : Colors.grey.shade300),
+                      style: BorderStyle.none,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    isHovered ? 'Soltar aquí' : 'Sin tareas en esta columna',
+                    style: TextStyle(
+                      color: isHovered ? colorHeader : Colors.grey.shade400,
+                      fontWeight: isHovered ? FontWeight.bold : FontWeight.normal,
+                      fontSize: 12,
+                    ),
+                  ),
+                )
                     : SingleChildScrollView(
-                        physics: const BouncingScrollPhysics(),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: tareas.map((tarea) => Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: LongPressDraggable<Tarea>(
-                              data: tarea,
-                              maxSimultaneousDrags: permisos.moverTareas ? 1 : 0,
-                              delay: const Duration(milliseconds: 150),
-                              hapticFeedbackOnStart: true,
-                              axis: null,
-                              feedback: Material(
-                                type: MaterialType.transparency,
-                                child: Transform.scale(
-                                  scale: 1.03,
-                                  child: SizedBox(
-                                    width: 280,
-                                    child: TaskCardWidget(
-                                      tarea: tarea,
-                                      tablero: tablero,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              childWhenDragging: Opacity(
-                                opacity: 0.3,
-                                child: TaskCardWidget(
-                                  tarea: tarea,
-                                  tablero: tablero,
-                                ),
-                              ),
-                              child: GestureDetector(
-                                onTap: () {
-                                  showModalBottomSheet(
-                                    context: context,
-                                    isScrollControlled: true,
-                                    backgroundColor: theme.cardColor,
-                                    shape: const RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                                    ),
-                                    builder: (context) => DetalleTareaWidget(
-                                      tarea: tarea,
-                                      tablero: tablero,
-                                    ),
-                                  );
-                                },
-                                child: TaskCardWidget(
-                                  tarea: tarea,
-                                  tablero: tablero,
-                                ),
+                  physics: const BouncingScrollPhysics(),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: tareas.map((tarea) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: LongPressDraggable<Tarea>(
+                        data: tarea,
+                        maxSimultaneousDrags: permisos.moverTareas ? 1 : 0,
+                        delay: const Duration(milliseconds: 150),
+                        hapticFeedbackOnStart: true,
+                        axis: null,
+                        feedback: Material(
+                          type: MaterialType.transparency,
+                          child: Transform.scale(
+                            scale: 1.03,
+                            child: SizedBox(
+                              width: 280,
+                              child: TaskCardWidget(
+                                tarea: tarea,
+                                tablero: tablero,
                               ),
                             ),
-                          )).toList(),
+                          ),
+                        ),
+                        childWhenDragging: Opacity(
+                          opacity: 0.3,
+                          child: TaskCardWidget(
+                            tarea: tarea,
+                            tablero: tablero,
+                          ),
+                        ),
+                        child: GestureDetector(
+                          onTap: () {
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: theme.cardColor,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                              ),
+                              builder: (context) => DetalleTareaWidget(
+                                tarea: tarea,
+                                tablero: tablero,
+                              ),
+                            );
+                          },
+                          child: TaskCardWidget(
+                            tarea: tarea,
+                            tablero: tablero,
+                          ),
                         ),
                       ),
+                    )).toList(),
+                  ),
+                ),
               ),
             ],
           ),
