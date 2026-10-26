@@ -1954,32 +1954,30 @@ class _FormularioTableroState extends State<FormularioTablero>
         );
 
         if (widget.tablero == null) {
-          // 1. Crear el tablero primero.
           await _firestoreService.crearTableroConId(tablero);
+        } else {
+          await _firestoreService.actualizarTablero(tablero);
+        }
 
-          // 2. Guardar las invitaciones pendientes.
-          for (final entry in _invitacionesPendientes.entries) {
-            final usuario = entry.value;
-            final rol = _rolesInvitacionesPendientes[entry.key];
+        // Guardar las invitaciones pendientes (al crear o al editar).
+        for (final entry in _invitacionesPendientes.entries) {
+          final usuario = entry.value;
+          final rol = _rolesInvitacionesPendientes[entry.key];
 
-            if (rol == null) {
-              throw Exception(
-                'No se encontró el rol de ${usuario.nombreCompleto}',
-              );
-            }
-
-            await _firestoreService.crearInvitacion(
-              tableroId: tablero.id,
-              tableroNombre: tablero.nombre,
-              invitadoId: usuario.id,
-              invitadoEmail: usuario.email,
-              invitadoPor: tablero.creadorId,
-              rol: rol,
+          if (rol == null) {
+            throw Exception(
+              'No se encontró el rol de ${usuario.nombreCompleto}',
             );
           }
-        } else {
-          // Si estamos editando, actualizar solamente el tablero.
-          await _firestoreService.actualizarTablero(tablero);
+
+          await _firestoreService.crearInvitacion(
+            tableroId: tablero.id,
+            tableroNombre: tablero.nombre,
+            invitadoId: usuario.id,
+            invitadoEmail: usuario.email,
+            invitadoPor: uid,
+            rol: rol,
+          );
         }
 
         if (!mounted) return;
