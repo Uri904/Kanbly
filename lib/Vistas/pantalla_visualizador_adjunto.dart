@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import '../modelo/tarea.dart';
+import '../servicios/cache_adjuntos_service.dart';
 import 'widgets_visualizador/visor_pdf.dart';
 import 'widgets_visualizador/visor_video.dart';
 import 'widgets_visualizador/visor_docx.dart';
@@ -13,7 +14,8 @@ import 'widgets_visualizador/visor_imagen.dart';
 
 /// Pantalla completa para visualizar el contenido de archivos adjuntos (Word, PDF, Videos, Imágenes, Excel, PowerPoint, etc.)
 /// conservando todo el formato original y permitiendo abrirlos o editarlos con aplicaciones externas.
-class PantallaVisualizadorAdjunto extends StatelessWidget {
+/// Soporta almacenamiento en caché local para consumo y apertura 100% offline.
+class PantallaVisualizadorAdjunto extends StatefulWidget {
   final AdjuntoTarea adjunto;
 
   const PantallaVisualizadorAdjunto({
@@ -31,55 +33,105 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
     );
   }
 
+  @override
+  State<PantallaVisualizadorAdjunto> createState() => _PantallaVisualizadorAdjuntoState();
+}
+
+class _PantallaVisualizadorAdjuntoState extends State<PantallaVisualizadorAdjunto> {
+  File? _archivoLocal;
+  bool _estaEnCache = false;
+  bool _descargandoCache = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _inicializarCacheLocal();
+  }
+
+  Future<void> _inicializarCacheLocal() async {
+    // 1. Verificar si ya existe en almacenamiento local o caché
+    final localExistente = await CacheAdjuntosService.obtenerArchivoLocalSiExiste(
+      widget.adjunto.url,
+      widget.adjunto.nombre,
+    );
+
+    if (localExistente != null && mounted) {
+      setState(() {
+        _archivoLocal = localExistente;
+        _estaEnCache = true;
+      });
+      return;
+    }
+
+    // 2. Si es una URL remota y no está en caché, intentar descargarla para acceso offline futuro
+    if (widget.adjunto.url.startsWith('http://') || widget.adjunto.url.startsWith('https://')) {
+      setState(() => _descargandoCache = true);
+      final cacheGuardado = await CacheAdjuntosService.descargarYGuardarEnCache(
+        widget.adjunto.url,
+        widget.adjunto.nombre,
+      );
+
+      if (cacheGuardado != null && mounted) {
+        setState(() {
+          _archivoLocal = cacheGuardado;
+          _estaEnCache = true;
+          _descargandoCache = false;
+        });
+      } else if (mounted) {
+        setState(() => _descargandoCache = false);
+      }
+    }
+  }
+
   bool _esImagen() {
-    final tipo = adjunto.tipo.toLowerCase();
-    final nombre = adjunto.nombre.toLowerCase();
-    final url = adjunto.url.toLowerCase();
+    final tipo = widget.adjunto.tipo.toLowerCase();
+    final nombre = widget.adjunto.nombre.toLowerCase();
+    final url = widget.adjunto.url.toLowerCase();
     return tipo == 'imagen' ||
         ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.svg'].any((ext) => nombre.endsWith(ext) || url.endsWith(ext));
   }
 
   bool _esVideo() {
-    final tipo = adjunto.tipo.toLowerCase();
-    final nombre = adjunto.nombre.toLowerCase();
-    final url = adjunto.url.toLowerCase();
+    final tipo = widget.adjunto.tipo.toLowerCase();
+    final nombre = widget.adjunto.nombre.toLowerCase();
+    final url = widget.adjunto.url.toLowerCase();
     return tipo == 'video' ||
         ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.3gp'].any((ext) => nombre.endsWith(ext) || url.endsWith(ext));
   }
 
   bool _esPdf() {
-    final nombre = adjunto.nombre.toLowerCase();
-    final url = adjunto.url.toLowerCase();
+    final nombre = widget.adjunto.nombre.toLowerCase();
+    final url = widget.adjunto.url.toLowerCase();
     return nombre.endsWith('.pdf') || url.endsWith('.pdf');
   }
 
   bool _esDocx() {
-    final nombre = adjunto.nombre.toLowerCase();
-    final url = adjunto.url.toLowerCase();
+    final nombre = widget.adjunto.nombre.toLowerCase();
+    final url = widget.adjunto.url.toLowerCase();
     return nombre.endsWith('.docx') || url.endsWith('.docx') || nombre.endsWith('.doc') || url.endsWith('.doc');
   }
 
   bool _esExcel() {
-    final nombre = adjunto.nombre.toLowerCase();
-    final url = adjunto.url.toLowerCase();
+    final nombre = widget.adjunto.nombre.toLowerCase();
+    final url = widget.adjunto.url.toLowerCase();
     return nombre.endsWith('.xlsx') || url.endsWith('.xlsx') || nombre.endsWith('.xls') || url.endsWith('.xls') || nombre.endsWith('.csv');
   }
 
   bool _esPptx() {
-    final nombre = adjunto.nombre.toLowerCase();
-    final url = adjunto.url.toLowerCase();
+    final nombre = widget.adjunto.nombre.toLowerCase();
+    final url = widget.adjunto.url.toLowerCase();
     return nombre.endsWith('.pptx') || url.endsWith('.pptx') || nombre.endsWith('.ppt') || url.endsWith('.ppt');
   }
 
   bool _esTexto() {
-    final nombre = adjunto.nombre.toLowerCase();
-    final url = adjunto.url.toLowerCase();
+    final nombre = widget.adjunto.nombre.toLowerCase();
+    final url = widget.adjunto.url.toLowerCase();
     return ['.txt', '.json', '.md', '.log', '.xml', '.html', '.dart', '.yaml', '.yml', '.js', '.css']
         .any((ext) => nombre.endsWith(ext) || url.endsWith(ext));
   }
 
   Future<void> _abrirConAppExterna(BuildContext context) async {
-    final url = adjunto.url;
+    final url = widget.adjunto.url;
     if (url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -91,9 +143,10 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
     }
 
     try {
-      String pathParaAbrir = url;
+      String pathParaAbrir = _archivoLocal?.path ?? url;
 
-      if (url.startsWith('http://') || url.startsWith('https://')) {
+      if ((_archivoLocal == null || !_archivoLocal!.existsSync()) &&
+          (url.startsWith('http://') || url.startsWith('https://'))) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -104,22 +157,33 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
           );
         }
 
-        final tempDir = await getTemporaryDirectory();
-        final fileNameClean = adjunto.nombre.replaceAll(RegExp(r'[^\w.-]'), '_');
-        final localFile = File('${tempDir.path}/ext_$fileNameClean');
-
-        if (!localFile.existsSync()) {
-          final client = HttpClient();
-          final request = await client.getUrl(Uri.parse(url));
-          request.headers.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
-          final response = await request.close();
-          if (response.statusCode == 200) {
-            await response.pipe(localFile.openWrite());
-          } else {
-            throw Exception('Error servidor: ${response.statusCode}');
+        final fileCache = await CacheAdjuntosService.descargarYGuardarEnCache(url, widget.adjunto.nombre);
+        if (fileCache != null) {
+          pathParaAbrir = fileCache.path;
+          if (mounted) {
+            setState(() {
+              _archivoLocal = fileCache;
+              _estaEnCache = true;
+            });
           }
+        } else {
+          final tempDir = await getTemporaryDirectory();
+          final fileNameClean = widget.adjunto.nombre.replaceAll(RegExp(r'[^\w.-]'), '_');
+          final localFile = File('${tempDir.path}/ext_$fileNameClean');
+
+          if (!localFile.existsSync()) {
+            final client = HttpClient();
+            final request = await client.getUrl(Uri.parse(url));
+            request.headers.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
+            final response = await request.close();
+            if (response.statusCode == 200) {
+              await response.pipe(localFile.openWrite());
+            } else {
+              throw Exception('Error servidor: ${response.statusCode}');
+            }
+          }
+          pathParaAbrir = localFile.path;
         }
-        pathParaAbrir = localFile.path;
       }
 
       final result = await OpenFilex.open(pathParaAbrir);
@@ -134,7 +198,7 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
         } else if (result.type == ResultType.noAppToOpen) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('No se encontró una aplicación compatible instalada para abrir ${adjunto.nombre}. Instala Microsoft Office o un visor apropiado.'),
+              content: Text('No se encontró una aplicación compatible instalada para abrir ${widget.adjunto.nombre}. Instala un visor apropiado.'),
               backgroundColor: Colors.orange,
               duration: const Duration(seconds: 4),
             ),
@@ -200,14 +264,6 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
     final colorFondo = _obtenerColorFondoMesaTrabajo();
     final esMediaOscura = _esImagen() || _esVideo() || _esTexto();
 
-    File? archivoLocal;
-    try {
-      if (adjunto.url.isNotEmpty && !adjunto.url.startsWith('http')) {
-        final f = File(adjunto.url);
-        if (f.existsSync()) archivoLocal = f;
-      }
-    } catch (_) {}
-
     return Scaffold(
       backgroundColor: colorFondo,
       appBar: AppBar(
@@ -221,7 +277,7 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              adjunto.nombre,
+              widget.adjunto.nombre,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.inter(
@@ -230,12 +286,46 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
                 color: Colors.white,
               ),
             ),
-            Text(
-              '${adjunto.tipo.toUpperCase()} • ${adjunto.tamanoLegible}',
-              style: const TextStyle(
-                fontSize: 11,
-                color: Colors.white70,
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    '${widget.adjunto.tipo.toUpperCase()} • ${widget.adjunto.tamanoLegible}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ),
+                if (_estaEnCache) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.greenAccent.shade700,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.offline_pin_rounded, size: 10, color: Colors.white),
+                        SizedBox(width: 3),
+                        Text('Offline / Caché', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)),
+                      ],
+                    ),
+                  ),
+                ] else if (_descargandoCache) ...[
+                  const SizedBox(width: 8),
+                  const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 1.5),
+                  ),
+                ],
+              ],
             ),
           ],
         ),
@@ -263,7 +353,7 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
-          child: _buildCuerpoVisualizador(context, archivoLocal),
+          child: _buildCuerpoVisualizador(context, _archivoLocal),
         ),
       ),
       bottomNavigationBar: Container(
@@ -308,8 +398,8 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
     if (_esDocx()) {
       return VisorDocx(
         archivoLocal: archivoLocal,
-        urlRemota: adjunto.url,
-        nombreArchivo: adjunto.nombre,
+        urlRemota: widget.adjunto.url,
+        nombreArchivo: widget.adjunto.nombre,
       );
     }
 
@@ -317,8 +407,8 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
     if (_esPdf()) {
       return VisorPdf(
         archivoLocal: archivoLocal,
-        urlRemota: adjunto.url,
-        nombreArchivo: adjunto.nombre,
+        urlRemota: widget.adjunto.url,
+        nombreArchivo: widget.adjunto.nombre,
       );
     }
 
@@ -326,8 +416,8 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
     if (_esPptx()) {
       return VisorPptx(
         archivoLocal: archivoLocal,
-        urlRemota: adjunto.url,
-        nombreArchivo: adjunto.nombre,
+        urlRemota: widget.adjunto.url,
+        nombreArchivo: widget.adjunto.nombre,
       );
     }
 
@@ -335,8 +425,8 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
     if (_esVideo()) {
       return VisorVideo(
         archivoLocal: archivoLocal,
-        urlRemota: adjunto.url,
-        nombreArchivo: adjunto.nombre,
+        urlRemota: widget.adjunto.url,
+        nombreArchivo: widget.adjunto.nombre,
       );
     }
 
@@ -344,8 +434,8 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
     if (_esExcel()) {
       return VisorExcel(
         archivoLocal: archivoLocal,
-        urlRemota: adjunto.url,
-        nombreArchivo: adjunto.nombre,
+        urlRemota: widget.adjunto.url,
+        nombreArchivo: widget.adjunto.nombre,
       );
     }
 
@@ -353,8 +443,8 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
     if (_esImagen()) {
       return VisorImagen(
         archivoLocal: archivoLocal,
-        urlRemota: adjunto.url,
-        nombreArchivo: adjunto.nombre,
+        urlRemota: widget.adjunto.url,
+        nombreArchivo: widget.adjunto.nombre,
       );
     }
 
@@ -408,14 +498,14 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
             radius: 36,
             backgroundColor: const Color(0xFF52ABEB).withValues(alpha: 0.12),
             child: Icon(
-              _obtenerIconoGeneral(adjunto.tipo),
+              _obtenerIconoGeneral(widget.adjunto.tipo),
               color: const Color(0xFF52ABEB),
               size: 40,
             ),
           ),
           const SizedBox(height: 16),
           Text(
-            adjunto.nombre,
+            widget.adjunto.nombre,
             textAlign: TextAlign.center,
             style: GoogleFonts.inter(
               fontSize: 16,
@@ -425,7 +515,7 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Tipo: ${adjunto.tipo.toUpperCase()} • Tamaño: ${adjunto.tamanoLegible}',
+            'Tipo: ${widget.adjunto.tipo.toUpperCase()} • Tamaño: ${widget.adjunto.tamanoLegible}',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 20),
@@ -441,7 +531,7 @@ class PantallaVisualizadorAdjunto extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Ruta del archivo en el dispositivo:',
+                    'Ruta del archivo en el dispositivo (Caché local):',
                     style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey.shade700),
                   ),
                   const SizedBox(height: 4),

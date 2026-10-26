@@ -349,7 +349,9 @@ class _FilaTablero extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${tablero.esGrupal ? 'Equipo' : 'Individual'} · ${tablero.etiquetaRol}${tablero.rolKanban.isNotEmpty ? ' · ${tablero.rolKanban}' : ''}',
+                      tablero.esGrupal
+                          ? 'Equipo · ${tablero.etiquetaRol}${tablero.rolKanban.isNotEmpty ? ' · ${tablero.rolKanban}' : ''}'
+                          : 'Individual · Creado $fecha',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(

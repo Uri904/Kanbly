@@ -2,13 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import '../modelo/tarea.dart';
+import '../modelo/tablero.dart';
+import '../servicios/firestore_service.dart';
 import '../controlador/calendario_controller.dart';
 import 'detalle_tarea_widget.dart';
 
 class CalendarioTablero extends StatefulWidget {
   final String tableroId;
+  final Tablero? tablero;
 
-  const CalendarioTablero({super.key, required this.tableroId});
+  const CalendarioTablero({
+    super.key,
+    required this.tableroId,
+    this.tablero,
+  });
 
   @override
   State<CalendarioTablero> createState() => _CalendarioTableroState();
@@ -16,6 +23,26 @@ class CalendarioTablero extends StatefulWidget {
 
 class _CalendarioTableroState extends State<CalendarioTablero> {
   final CalendarioController _controller = CalendarioController();
+  final FirestoreService _firestoreService = FirestoreService();
+  Tablero? _tableroCargado;
+
+  @override
+  void initState() {
+    super.initState();
+    _tableroCargado = widget.tablero;
+    if (_tableroCargado == null) {
+      _cargarTablero();
+    }
+  }
+
+  Future<void> _cargarTablero() async {
+    try {
+      final t = await _firestoreService.obtenerTablero(widget.tableroId);
+      if (t != null && mounted) {
+        setState(() => _tableroCargado = t);
+      }
+    } catch (_) {}
+  }
 
   void _irAHoy() {
     setState(() {
@@ -401,7 +428,10 @@ class _CalendarioTableroState extends State<CalendarioTablero> {
                                   context: context,
                                   isScrollControlled: true,
                                   backgroundColor: Colors.transparent,
-                                  builder: (context) => DetalleTareaWidget(tarea: tarea),
+                                  builder: (context) => DetalleTareaWidget(
+                                    tarea: tarea,
+                                    tablero: _tableroCargado ?? widget.tablero,
+                                  ),
                                 );
                               },
                               child: Padding(

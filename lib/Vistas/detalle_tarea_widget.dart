@@ -537,7 +537,7 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
                     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     filled: true,
-                    fillColor: Colors.grey.shade50,
+                    fillColor: isDark ? const Color(0xFF182030) : Colors.grey.shade50,
                   ),
                 )
               else
@@ -1063,8 +1063,11 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
 
   // --- SELECCIÓN Y VALIDACIÓN DE ARCHIVOS EN MODO EDICIÓN CON LÍMITE DE 10MB ---
   void _mostrarMenuAdjuntarArchivo() {
+    final theme = Theme.of(context);
+
     showModalBottomSheet(
       context: context,
+      backgroundColor: theme.cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -1076,9 +1079,9 @@ class _DetalleTareaWidgetState extends State<DetalleTareaWidget> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Adjuntar Archivo a la Tarea (Máx. 10MB):',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF1E293B)),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: theme.colorScheme.onSurface),
                 ),
                 const SizedBox(height: 12),
                 ListTile(

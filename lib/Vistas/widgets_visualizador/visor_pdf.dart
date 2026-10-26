@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
+import '../../servicios/cache_adjuntos_service.dart';
 
 /// Visor nativo e interactivo para archivos PDF (.pdf) con soporte para
 /// delimitación clara de páginas sobre un fondo contrastante tenue, bordes de hoja,
@@ -54,8 +55,31 @@ class _VisorPdfState extends State<VisorPdf> {
         return;
       }
 
+      final localCache = await CacheAdjuntosService.obtenerArchivoLocalSiExiste(
+        widget.urlRemota,
+        widget.nombreArchivo,
+      );
+      if (localCache != null && localCache.existsSync()) {
+        setState(() {
+          _pathLocalDefinitivo = localCache.path;
+          _cargando = false;
+        });
+        return;
+      }
+
       final url = widget.urlRemota.trim();
       if (url.startsWith('http://') || url.startsWith('https://')) {
+        final downloaded = await CacheAdjuntosService.descargarYGuardarEnCache(url, widget.nombreArchivo);
+        if (downloaded != null && downloaded.existsSync()) {
+          if (mounted) {
+            setState(() {
+              _pathLocalDefinitivo = downloaded.path;
+              _cargando = false;
+            });
+          }
+          return;
+        }
+
         final client = HttpClient();
         final request = await client.getUrl(Uri.parse(url));
         request.headers.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)');

@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kanbly/modelo/tarea.dart';
 import 'package:kanbly/utilerias/docx_parser.dart';
 import 'package:kanbly/utilerias/pptx_parser.dart';
+import 'package:kanbly/Vistas/pantalla_visualizador_adjunto.dart';
 import 'package:archive/archive.dart';
 
 void main() {
@@ -169,6 +171,33 @@ void main() {
 
       expect(adjuntoPowerPoint.nombre.endsWith('.pptx'), isTrue);
       expect(adjuntoPowerPoint.tamanoLegible, equals('1.5 MB'));
+    });
+
+    testWidgets('PantallaVisualizadorAdjunto se renderiza en pantallas estrechas sin desbordamiento (RenderFlex overflow)', (WidgetTester tester) async {
+      final adjunto = AdjuntoTarea(
+        id: '10',
+        nombre: 'propuesta_ci_github_workflows_ci.yml',
+        url: 'https://ejemplo.com/propuesta_ci_github_workflows_ci.yml',
+        tipo: 'documento',
+        tamanoBytes: 606,
+        fechaAdjunto: DateTime.now(),
+      );
+
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PantallaVisualizadorAdjunto(
+            adjunto: adjunto,
+          ),
+        ),
+      );
+
+      expect(find.text('propuesta_ci_github_workflows_ci.yml'), findsAtLeast(1));
+      expect(find.byType(PantallaVisualizadorAdjunto), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 }

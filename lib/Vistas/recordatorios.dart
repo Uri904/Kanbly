@@ -1,18 +1,22 @@
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../modelo/recordatorio.dart';
+import '../modelo/tablero.dart';
+import '../servicios/firestore_service.dart';
 import '../servicios/recordatorio_service.dart';
 import '../servicios/notificacion_recordatorio_service.dart';
 
-
 class Recordatorios extends StatefulWidget {
   final String tableroId;
+  final Tablero? tablero;
 
   const Recordatorios({
     super.key,
     required this.tableroId,
+    this.tablero,
   });
 
   @override
@@ -20,6 +24,34 @@ class Recordatorios extends StatefulWidget {
 }
 
 class _RecordatoriosState extends State<Recordatorios> {
+  final FirestoreService _firestoreService = FirestoreService();
+  Tablero? _tableroCargado;
+
+  @override
+  void initState() {
+    super.initState();
+    _tableroCargado = widget.tablero;
+    if (_tableroCargado == null) {
+      _cargarTablero();
+    }
+    NotificacionRecordatorioService.inicializar();
+  }
+
+  Future<void> _cargarTablero() async {
+    try {
+      final t = await _firestoreService.obtenerTablero(widget.tableroId);
+      if (t != null && mounted) {
+        setState(() => _tableroCargado = t);
+      }
+    } catch (_) {}
+  }
+
+  PermisosMiembro get _permisos {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final t = _tableroCargado ?? widget.tablero;
+    if (t == null) return const PermisosMiembro();
+    return t.obtenerPermisosDeUsuario(uid);
+  }
 
   Widget _construirLista(
       List<Recordatorio> recordatorios,
@@ -142,13 +174,19 @@ class _RecordatoriosState extends State<Recordatorios> {
     return lista;
   }
 
-  @override
-  void initState() {
-    super.initState();
-    NotificacionRecordatorioService.inicializar();
-  }
+
 
   Future<void> _crearRecordatorio() async {
+    if (!_permisos.crearTareas) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No tienes permiso para crear recordatorios en este tablero.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     final tituloController = TextEditingController();
     final descripcionController = TextEditingController();
 
@@ -340,6 +378,16 @@ class _RecordatoriosState extends State<Recordatorios> {
   Future<void> _eliminarRecordatorio(
       Recordatorio recordatorio,
       ) async {
+    if (!_permisos.eliminarTareas) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No tienes permiso para eliminar recordatorios en este tablero.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     try {
       // Cancelar la notificación del dispositivo.
       await NotificacionRecordatorioService.cancelar(

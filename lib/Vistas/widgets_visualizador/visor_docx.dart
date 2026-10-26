@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../../utilerias/docx_parser.dart';
+import '../../servicios/cache_adjuntos_service.dart';
 
 /// Visor interactivo para documentos Microsoft Word (.docx, .doc) que presenta
 /// hojas físicas A4 vectoriales completas (595pt x 842pt) ajustadas a la pantalla
@@ -41,7 +42,18 @@ class _VisorDocxState extends State<VisorDocx> {
     _evaluarModoYCargar();
   }
 
-  void _evaluarModoYCargar() {
+  Future<void> _evaluarModoYCargar() async {
+    final localCache = await CacheAdjuntosService.obtenerArchivoLocalSiExiste(
+      widget.urlRemota,
+      widget.nombreArchivo,
+    );
+
+    if ((widget.archivoLocal != null && widget.archivoLocal!.existsSync()) || localCache != null) {
+      _usarVisorWebOffice = false;
+      await _cargarDocumentoWordLocal(archivoDirecto: widget.archivoLocal ?? localCache);
+      return;
+    }
+
     final url = widget.urlRemota.trim();
     final esUrlPublicaHttp = url.startsWith('http://') || url.startsWith('https://');
 
@@ -50,7 +62,7 @@ class _VisorDocxState extends State<VisorDocx> {
       _inicializarWebView(url);
     } else {
       _usarVisorWebOffice = false;
-      _cargarDocumentoWordLocal();
+      await _cargarDocumentoWordLocal();
     }
   }
 
@@ -66,10 +78,10 @@ class _VisorDocxState extends State<VisorDocx> {
     });
   }
 
-  Future<void> _cargarDocumentoWordLocal() async {
+  Future<void> _cargarDocumentoWordLocal({File? archivoDirecto}) async {
     setState(() => _cargando = true);
 
-    File? archivoAUsar = widget.archivoLocal;
+    File? archivoAUsar = archivoDirecto ?? widget.archivoLocal;
     if (archivoAUsar == null || !archivoAUsar.existsSync()) {
       final url = widget.urlRemota.trim();
       if (url.isNotEmpty && !url.startsWith('http') && File(url).existsSync()) {
@@ -353,10 +365,15 @@ class _VisorDocxState extends State<VisorDocx> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    widget.nombreArchivo,
-                    style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF94A3B8)),
+                  Expanded(
+                    child: Text(
+                      widget.nombreArchivo,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF94A3B8)),
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   Text(
                     'Página $numeroPagina de $totalPaginas',
                     style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF64748B), fontWeight: FontWeight.bold),

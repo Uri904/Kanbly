@@ -70,6 +70,9 @@ class _PantallaBorradoresPersonalesState extends State<PantallaBorradoresPersona
 
   /// Verifica borradores con fecha de publicación automatizada cumplida y los publica
   void _verificarBorradoresProgramados(List<BorradorNota> borradores) async {
+    final permisos = widget.tablero.obtenerPermisosDeUsuario(_currentUid);
+    if (!permisos.crearTareas) return;
+
     final ahora = DateTime.now();
     for (final b in borradores) {
       if (!b.esPublicado &&
@@ -953,7 +956,7 @@ class _PantallaBorradoresPersonalesState extends State<PantallaBorradoresPersona
                       children: [
                         Text(
                           'Archivos Adjuntos (${adjuntosTemporales.length}):',
-                          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: textoPrincipal),
                         ),
                         TextButton.icon(
                           onPressed: () => _mostrarMenuAdjuntarEnModal(setModalState, adjuntosTemporales),
@@ -971,9 +974,9 @@ class _PantallaBorradoresPersonalesState extends State<PantallaBorradoresPersona
                             margin: const EdgeInsets.only(bottom: 6),
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF8FAFC),
+                              color: isDark ? const Color(0xFF182030) : const Color(0xFFF8FAFC),
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.grey.shade300),
+                              border: Border.all(color: isDark ? const Color(0xFF2D3748) : Colors.grey.shade300),
                             ),
                             child: Row(
                               children: [
@@ -1424,9 +1427,9 @@ class _PantallaBorradoresPersonalesState extends State<PantallaBorradoresPersona
                             margin: const EdgeInsets.only(bottom: 6),
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF8FAFC),
+                              color: isDark ? const Color(0xFF182030) : const Color(0xFFF8FAFC),
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.grey.shade300),
+                              border: Border.all(color: isDark ? const Color(0xFF2D3748) : Colors.grey.shade300),
                             ),
                             child: Row(
                               children: [
@@ -1744,6 +1747,17 @@ class _PantallaBorradoresPersonalesState extends State<PantallaBorradoresPersona
 
   // MODAL PARA PUBLICAR
   void _mostrarModalPublicarTarea(BorradorNota borrador) {
+    final permisos = widget.tablero.obtenerPermisosDeUsuario(_currentUid);
+    if (!permisos.crearTareas) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No tienes permisos para crear o publicar tareas en este tablero.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     final theme = Theme.of(context);
     final bool isDark = theme.brightness == Brightness.dark;
     final Color textoPrincipal = theme.colorScheme.onSurface;

@@ -362,9 +362,9 @@ class _FormularioTareaState extends State<FormularioTarea> {
                       margin: const EdgeInsets.only(bottom: 6),
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
+                        color: isDark ? const Color(0xFF182030) : const Color(0xFFF8FAFC),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.grey.shade300),
+                        border: Border.all(color: isDark ? const Color(0xFF2D3748) : Colors.grey.shade300),
                       ),
                       child: Row(
                         children: [

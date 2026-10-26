@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'controlador/auth_controller.dart';
 import 'controlador/preferencias_controller.dart';
 import 'controlador/theme_controller.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'Vistas/login_view.dart';
 import 'Vistas/splash_animado_view.dart';
 import 'firebase_options.dart';
@@ -20,6 +21,13 @@ Future<void> main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    // Habilitar persistencia offline y caché en disco de Firestore
+    try {
+      FirebaseFirestore.instance.settings = const Settings(
+        persistenceEnabled: true,
+        cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+      );
+    } catch (_) {}
   } on FirebaseException catch (e) {
     if (e.code != 'duplicate-app') {
       rethrow;

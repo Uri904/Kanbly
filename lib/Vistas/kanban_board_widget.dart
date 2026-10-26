@@ -331,14 +331,16 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                           ? tableroActivo!.columnas
                           : const ['Pendiente', 'En progreso', 'Completada'];
 
-                      const List<Color> paletaColoresHeaders = [
-                        Color(0xFF1E293B), // Oscuro / Por Hacer
-                        Color(0xFF52ABEB), // Azul / En Progreso
-                        Color(0xFF63D0A1), // Verde Turquesa / Completada
-                        Color(0xFFE53E3E), // Rojo / Bloqueada
-                        Color(0xFF8B5CF6), // Morado
-                        Color(0xFFF59E0B), // Naranja / Ámbar
-                        Color(0xFF10B981), // Esmeralda
+                      final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+                      final List<Color> paletaColoresHeaders = [
+                        isDark ? const Color(0xFF94A3B8) : const Color(0xFF1E293B), // Slate / Por Hacer (Tono claro en oscuro)
+                        const Color(0xFF52ABEB), // Azul / En Progreso
+                        const Color(0xFF63D0A1), // Verde Turquesa / Completada
+                        const Color(0xFFE53E3E), // Rojo / Bloqueada
+                        const Color(0xFF8B5CF6), // Morado
+                        const Color(0xFFF59E0B), // Naranja / Ámbar
+                        const Color(0xFF10B981), // Esmeralda
                       ];
 
                       // LayoutBuilder: la altura de las columnas se calcula con el
@@ -756,6 +758,7 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
         MaterialPageRoute(
           builder: (context) => CalendarioTablero(
             tableroId: tableroActivo.id,
+            tablero: tableroActivo,
           ),
         ),
       );
@@ -784,6 +787,7 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
         MaterialPageRoute(
           builder: (context) => Recordatorios(
             tableroId: tableroActivo.id,
+            tablero: tableroActivo,
           ),
         ),
       );
@@ -864,12 +868,19 @@ class ColumnHeaderWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    // Si es modo oscuro y el color proporcionado es excesivamente oscuro (luminancia baja),
+    // lo adaptamos a un tono slate claro visible (0xFF94A3B8).
+    final Color colorEfectivo = (isDark && colorHeader.computeLuminance() < 0.25)
+        ? const Color(0xFF94A3B8)
+        : colorHeader;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: colorHeader.withOpacity(0.12),
+        color: colorEfectivo.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colorHeader.withOpacity(0.3), width: 1.2),
+        border: Border.all(color: colorEfectivo.withValues(alpha: 0.3), width: 1.2),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -880,7 +891,7 @@ class ColumnHeaderWidget extends StatelessWidget {
                 width: 8,
                 height: 8,
                 decoration: BoxDecoration(
-                  color: colorHeader,
+                  color: colorEfectivo,
                   shape: BoxShape.circle,
                 ),
               ),
@@ -888,7 +899,7 @@ class ColumnHeaderWidget extends StatelessWidget {
               Text(
                 title,
                 style: TextStyle(
-                  color: colorHeader,
+                  color: colorEfectivo,
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
                   letterSpacing: 0.5,
@@ -899,7 +910,7 @@ class ColumnHeaderWidget extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: colorHeader,
+              color: colorEfectivo,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
@@ -958,7 +969,7 @@ class TaskCardWidget extends StatelessWidget {
     String nombreAsignado = 'Sin asignar';
     bool tieneAsignado = false;
 
-    if (tarea.asignadoA != null && tablero != null && tablero!.miembrosInfo.containsKey(tarea.asignadoA)) {
+    if (tarea.asignadoA != null && tablero != null && tablero!.esGrupal && tablero!.miembrosInfo.containsKey(tarea.asignadoA)) {
       final info = tablero!.miembrosInfo[tarea.asignadoA];
       if (info != null && info.rolKanban.trim().isNotEmpty) {
         tieneAsignado = true;
