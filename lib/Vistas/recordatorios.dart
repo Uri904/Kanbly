@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -25,6 +24,7 @@ class Recordatorios extends StatefulWidget {
 
 class _RecordatoriosState extends State<Recordatorios> {
   final FirestoreService _firestoreService = FirestoreService();
+  final RecordatorioService _recordatorioService = RecordatorioService();
   Tablero? _tableroCargado;
 
   @override
@@ -53,6 +53,8 @@ class _RecordatoriosState extends State<Recordatorios> {
     return t.obtenerPermisosDeUsuario(uid);
   }
 
+  DateTime get _ahora => DateTime.now();
+
   Widget _construirLista(
       List<Recordatorio> recordatorios,
       bool esHistorial,
@@ -63,9 +65,7 @@ class _RecordatoriosState extends State<Recordatorios> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              esHistorial
-                  ? Icons.history
-                  : Icons.notifications_none,
+              esHistorial ? Icons.history : Icons.notifications_none,
               size: 64,
             ),
             const SizedBox(height: 12),
@@ -74,8 +74,7 @@ class _RecordatoriosState extends State<Recordatorios> {
                   ? 'Todavía no tienes recordatorios anteriores'
                   : 'No tienes recordatorios programados',
             ),
-            if (!esHistorial)
-              const Text('Pulsa + para crear uno.'),
+            if (!esHistorial) const Text('Pulsa + para crear uno.'),
           ],
         ),
       );
@@ -94,9 +93,7 @@ class _RecordatoriosState extends State<Recordatorios> {
           child: ListTile(
             leading: CircleAvatar(
               child: Icon(
-                esHistorial
-                    ? Icons.history
-                    : Icons.notifications_active,
+                esHistorial ? Icons.history : Icons.notifications_active,
               ),
             ),
             title: Text(recordatorio.titulo),
@@ -132,8 +129,7 @@ class _RecordatoriosState extends State<Recordatorios> {
             trailing: IconButton(
               tooltip: 'Eliminar recordatorio',
               icon: const Icon(Icons.delete_outline),
-              onPressed: () =>
-                  _eliminarRecordatorio(recordatorio),
+              onPressed: () => _eliminarRecordatorio(recordatorio),
             ),
           ),
         );
@@ -141,19 +137,13 @@ class _RecordatoriosState extends State<Recordatorios> {
     );
   }
 
-  final RecordatorioService _recordatorioService =
-  RecordatorioService();
-
-  DateTime get _ahora => DateTime.now();
-
   List<Recordatorio> _obtenerProgramados(
       List<Recordatorio> recordatorios,
       ) {
     final ahora = _ahora;
 
-    final lista = recordatorios
-        .where((r) => r.fechaHora.isAfter(ahora))
-        .toList();
+    final lista =
+    recordatorios.where((r) => r.fechaHora.isAfter(ahora)).toList();
 
     lista.sort((a, b) => a.fechaHora.compareTo(b.fechaHora));
 
@@ -165,179 +155,34 @@ class _RecordatoriosState extends State<Recordatorios> {
       ) {
     final ahora = _ahora;
 
-    final lista = recordatorios
-        .where((r) => !r.fechaHora.isAfter(ahora))
-        .toList();
+    final lista =
+    recordatorios.where((r) => !r.fechaHora.isAfter(ahora)).toList();
 
     lista.sort((a, b) => b.fechaHora.compareTo(a.fechaHora));
 
     return lista;
   }
 
-
-
   Future<void> _crearRecordatorio() async {
     if (!_permisos.crearTareas) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No tienes permiso para crear recordatorios en este tablero.'),
+          content: Text(
+            'No tienes permiso para crear recordatorios en este tablero.',
+          ),
           backgroundColor: Colors.redAccent,
         ),
       );
       return;
     }
 
-    final tituloController = TextEditingController();
-    final descripcionController = TextEditingController();
-
-    DateTime fechaSeleccionada = DateTime.now().add(
-      const Duration(hours: 1),
-    );
-
     try {
+      // El diálogo es un widget propio: él crea y destruye sus controllers.
       final resultado = await showDialog<Recordatorio>(
         context: context,
-        builder: (dialogContext) {
-          return StatefulBuilder(
-            builder: (context, setDialogState) {
-              return AlertDialog(
-                title: const Text('Nuevo recordatorio'),
-                content: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextField(
-                        controller: tituloController,
-                        decoration: const InputDecoration(
-                          labelText: 'Título',
-                          hintText: 'Ej. Entregar proyecto',
-                        ),
-                      ),
-                      TextField(
-                        controller: descripcionController,
-                        decoration: const InputDecoration(
-                          labelText: 'Descripción (opcional)',
-                        ),
-                        maxLines: 3,
-                      ),
-                      const SizedBox(height: 16),
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.calendar_month),
-                        title: const Text('Fecha y hora'),
-                        subtitle: Text(
-                          DateFormat('dd/MM/yyyy HH:mm')
-                              .format(fechaSeleccionada),
-                        ),
-                        onTap: () async {
-                          final fecha = await showDatePicker(
-                            context: dialogContext,
-                            initialDate: fechaSeleccionada,
-                            firstDate: DateTime.now(),
-                            lastDate: DateTime(2100),
-                          );
-
-                          if (fecha == null ||
-                              !dialogContext.mounted) {
-                            return;
-                          }
-
-                          final hora = await showTimePicker(
-                            context: dialogContext,
-                            initialTime: TimeOfDay.fromDateTime(
-                              fechaSeleccionada,
-                            ),
-                          );
-
-                          if (hora == null ||
-                              !dialogContext.mounted) {
-                            return;
-                          }
-
-                          final nuevaFecha = DateTime(
-                            fecha.year,
-                            fecha.month,
-                            fecha.day,
-                            hora.hour,
-                            hora.minute,
-                          );
-
-                          if (!nuevaFecha.isAfter(DateTime.now())) {
-                            ScaffoldMessenger.of(dialogContext)
-                                .showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Selecciona una fecha y hora futuras.',
-                                ),
-                              ),
-                            );
-                            return;
-                          }
-
-                          setDialogState(() {
-                            fechaSeleccionada = nuevaFecha;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () =>
-                        Navigator.pop(dialogContext),
-                    child: const Text('Cancelar'),
-                  ),
-                  FilledButton(
-                    onPressed: () {
-                      final titulo =
-                      tituloController.text.trim();
-
-                      if (titulo.isEmpty) {
-                        ScaffoldMessenger.of(dialogContext)
-                            .showSnackBar(
-                          const SnackBar(
-                            content: Text('Escribe un título.'),
-                          ),
-                        );
-                        return;
-                      }
-
-                      if (!fechaSeleccionada
-                          .isAfter(DateTime.now())) {
-                        ScaffoldMessenger.of(dialogContext)
-                            .showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Selecciona una fecha y hora futuras.',
-                            ),
-                          ),
-                        );
-                        return;
-                      }
-
-                      final recordatorio = Recordatorio(
-                        id: DateTime.now()
-                            .microsecondsSinceEpoch
-                            .toString(),
-                        tableroId: widget.tableroId,
-                        titulo: titulo,
-                        descripcion: descripcionController.text.trim(),
-                        fechaHora: fechaSeleccionada,
-                      );
-
-                      Navigator.pop(
-                        dialogContext,
-                        recordatorio,
-                      );
-                    },
-                    child: const Text('Guardar'),
-                  ),
-                ],
-              );
-            },
-          );
-        },
+        builder: (_) => _DialogoNuevoRecordatorio(
+          tableroId: widget.tableroId,
+        ),
       );
 
       if (resultado == null || !mounted) return;
@@ -346,17 +191,13 @@ class _RecordatoriosState extends State<Recordatorios> {
       await _recordatorioService.guardar(resultado);
 
       // Programar la notificación local.
-      await NotificacionRecordatorioService.programar(
-        resultado,
-      );
+      await NotificacionRecordatorioService.programar(resultado);
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Recordatorio creado correctamente.',
-          ),
+          content: Text('Recordatorio creado correctamente.'),
         ),
       );
     } catch (e) {
@@ -364,14 +205,9 @@ class _RecordatoriosState extends State<Recordatorios> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'No se pudo crear el recordatorio: $e',
-          ),
+          content: Text('No se pudo crear el recordatorio: $e'),
         ),
       );
-    } finally {
-      tituloController.dispose();
-      descripcionController.dispose();
     }
   }
 
@@ -381,7 +217,9 @@ class _RecordatoriosState extends State<Recordatorios> {
     if (!_permisos.eliminarTareas) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No tienes permiso para eliminar recordatorios en este tablero.'),
+          content: Text(
+            'No tienes permiso para eliminar recordatorios en este tablero.',
+          ),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -390,22 +228,16 @@ class _RecordatoriosState extends State<Recordatorios> {
 
     try {
       // Cancelar la notificación del dispositivo.
-      await NotificacionRecordatorioService.cancelar(
-        recordatorio.id,
-      );
+      await NotificacionRecordatorioService.cancelar(recordatorio.id);
 
       // Eliminar el documento de Firestore.
-      await _recordatorioService.eliminar(
-        recordatorio.id,
-      );
+      await _recordatorioService.eliminar(recordatorio.id);
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Recordatorio eliminado correctamente.',
-          ),
+          content: Text('Recordatorio eliminado correctamente.'),
         ),
       );
     } catch (e) {
@@ -413,9 +245,7 @@ class _RecordatoriosState extends State<Recordatorios> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Error al eliminar el recordatorio: $e',
-          ),
+          content: Text('Error al eliminar el recordatorio: $e'),
         ),
       );
     }
@@ -427,9 +257,9 @@ class _RecordatoriosState extends State<Recordatorios> {
       appBar: AppBar(
         title: const Text('Mis recordatorios'),
       ),
-
       body: StreamBuilder<List<Recordatorio>>(
-        stream: _recordatorioService.obtenerTodos(widget.tableroId),        builder: (context, snapshot) {
+        stream: _recordatorioService.obtenerTodos(widget.tableroId),
+        builder: (context, snapshot) {
           if (snapshot.hasError) {
             return const Center(
               child: Text(
@@ -480,12 +310,156 @@ class _RecordatoriosState extends State<Recordatorios> {
           );
         },
       ),
-
       floatingActionButton: FloatingActionButton(
         onPressed: _crearRecordatorio,
         tooltip: 'Crear recordatorio',
         child: const Icon(Icons.add),
       ),
+    );
+  }
+}
+
+/// Diálogo para crear un recordatorio.
+///
+/// Es un StatefulWidget independiente para que los TextEditingController
+/// se destruyan en su propio dispose(), cuando el diálogo ya desapareció
+/// por completo (evita el error "used after being disposed" al tocar fuera).
+class _DialogoNuevoRecordatorio extends StatefulWidget {
+  final String tableroId;
+
+  const _DialogoNuevoRecordatorio({required this.tableroId});
+
+  @override
+  State<_DialogoNuevoRecordatorio> createState() =>
+      _DialogoNuevoRecordatorioState();
+}
+
+class _DialogoNuevoRecordatorioState extends State<_DialogoNuevoRecordatorio> {
+  final TextEditingController _tituloController = TextEditingController();
+  final TextEditingController _descripcionController = TextEditingController();
+
+  late DateTime _fechaSeleccionada =
+  DateTime.now().add(const Duration(hours: 1));
+
+  @override
+  void dispose() {
+    _tituloController.dispose();
+    _descripcionController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _elegirFecha() async {
+    final fecha = await showDatePicker(
+      context: context,
+      initialDate: _fechaSeleccionada,
+      firstDate: DateTime.now(),
+      lastDate: DateTime(2100),
+    );
+
+    if (fecha == null || !mounted) return;
+
+    final hora = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_fechaSeleccionada),
+    );
+
+    if (hora == null || !mounted) return;
+
+    final nuevaFecha = DateTime(
+      fecha.year,
+      fecha.month,
+      fecha.day,
+      hora.hour,
+      hora.minute,
+    );
+
+    if (!nuevaFecha.isAfter(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selecciona una fecha y hora futuras.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _fechaSeleccionada = nuevaFecha);
+  }
+
+  void _guardar() {
+    final titulo = _tituloController.text.trim();
+
+    if (titulo.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Escribe un título.')),
+      );
+      return;
+    }
+
+    if (!_fechaSeleccionada.isAfter(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selecciona una fecha y hora futuras.'),
+        ),
+      );
+      return;
+    }
+
+    final recordatorio = Recordatorio(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      tableroId: widget.tableroId,
+      titulo: titulo,
+      descripcion: _descripcionController.text.trim(),
+      fechaHora: _fechaSeleccionada,
+    );
+
+    Navigator.pop(context, recordatorio);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Nuevo recordatorio'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _tituloController,
+              decoration: const InputDecoration(
+                labelText: 'Título',
+                hintText: 'Ej. Entregar proyecto',
+              ),
+            ),
+            TextField(
+              controller: _descripcionController,
+              decoration: const InputDecoration(
+                labelText: 'Descripción (opcional)',
+              ),
+              maxLines: 3,
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.calendar_month),
+              title: const Text('Fecha y hora'),
+              subtitle: Text(
+                DateFormat('dd/MM/yyyy HH:mm').format(_fechaSeleccionada),
+              ),
+              onTap: _elegirFecha,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: _guardar,
+          child: const Text('Guardar'),
+        ),
+      ],
     );
   }
 }
