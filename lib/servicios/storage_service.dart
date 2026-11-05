@@ -50,9 +50,9 @@ class StorageService {
       }
     } catch (e) {
       if (kDebugMode) {
-        print('Error en StorageService.subirAdjuntoTarea: $e');
+        print('Modo offline / Red no disponible en StorageService.subirAdjuntoTarea. Conservando ruta local: $filePath ($e)');
       }
-      rethrow;
+      return filePath;
     }
   }
 }

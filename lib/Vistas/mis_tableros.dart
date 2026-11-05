@@ -89,7 +89,33 @@ class _MisTablerosState extends State<MisTableros> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(height: horizontal ? 6 : 12),
+          SizedBox(height: horizontal ? 4 : 8),
+
+          // --- INDICADOR MODO OFFLINE Y SINCRONIZACIÓN AUTOMÁTICA ---
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
+              decoration: BoxDecoration(
+                color: const Color(0xFF63D0A1).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF63D0A1).withOpacity(0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.cloud_sync_rounded, size: 16, color: Color(0xFF63B09C)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Modo sin conexión listo: Crea tableros y tareas localmente. Se sincronizarán a la nube automáticamente.',
+                      style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w500, color: Color(0xFF4A5568)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(height: horizontal ? 4 : 8),
 
           // --- BARRA DE PESTAÑAS ---
           Padding(

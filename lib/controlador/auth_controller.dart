@@ -161,10 +161,40 @@ class AuthController extends ChangeNotifier {
           _usuarioActual = usuario;
           _setStatus(AuthStatus.authenticated);
           return;
+        } else {
+          final localUser = Usuario(
+            id: user.uid,
+            email: user.email ?? '',
+            nombreCompleto: user.displayName ?? (user.email != null ? user.email!.split('@').first : 'Usuario Local'),
+            fechaRegistro: DateTime.now(),
+            emailVerificado: user.emailVerified,
+            rol: 'estudiante',
+            tablerosIds: [],
+            activo: true,
+          );
+          _usuarioActual = localUser;
+          _setStatus(AuthStatus.authenticated);
+          return;
         }
       }
       _setStatus(AuthStatus.unauthenticated);
     } catch (e) {
+      final user = _authService.getCurrentUser();
+      if (user != null) {
+        final localUser = Usuario(
+          id: user.uid,
+          email: user.email ?? '',
+          nombreCompleto: user.displayName ?? (user.email != null ? user.email!.split('@').first : 'Usuario Local'),
+          fechaRegistro: DateTime.now(),
+          emailVerificado: user.emailVerified,
+          rol: 'estudiante',
+          tablerosIds: [],
+          activo: true,
+        );
+        _usuarioActual = localUser;
+        _setStatus(AuthStatus.authenticated);
+        return;
+      }
       _setError(e.toString());
       _setStatus(AuthStatus.error);
     }

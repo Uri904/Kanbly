@@ -36,19 +36,37 @@ class FirestoreService {
 
   Future<Usuario?> obtenerUsuario(String userId) async {
     try {
-      final doc = await _firestore.collection('usuarios').doc(userId).get();
-      if (doc.exists) {
+      DocumentSnapshot<Map<String, dynamic>> doc;
+      try {
+        doc = await _firestore.collection('usuarios').doc(userId).get(const GetOptions(source: Source.serverAndCache));
+      } catch (_) {
+        doc = await _firestore.collection('usuarios').doc(userId).get(const GetOptions(source: Source.cache));
+      }
+      if (doc.exists && doc.data() != null) {
         return Usuario.fromMap(doc.id, doc.data()!);
       }
       return null;
     } catch (e) {
-      throw Exception('Error al obtener usuario: $e');
+      final currentUser = _auth.currentUser;
+      if (currentUser != null && currentUser.uid == userId) {
+        return Usuario(
+          id: currentUser.uid,
+          email: currentUser.email ?? '',
+          nombreCompleto: currentUser.displayName ?? (currentUser.email != null ? currentUser.email!.split('@').first : 'Usuario Local'),
+          fechaRegistro: DateTime.now(),
+          emailVerificado: currentUser.emailVerified,
+          rol: 'estudiante',
+          tablerosIds: [],
+          activo: true,
+        );
+      }
+      return null;
     }
   }
 
   Future<void> actualizarUsuario(Usuario usuario) async {
     try {
-      await _firestore.collection('usuarios').doc(usuario.id).update(usuario.toMap());
+      await _firestore.collection('usuarios').doc(usuario.id).set(usuario.toMap(), SetOptions(merge: true));
     } catch (e) {
       throw Exception('Error al actualizar usuario: $e');
     }
@@ -69,9 +87,9 @@ class FirestoreService {
 
       // Actualizar el usuario para agregar el tablero a su lista
       final usuarioRef = _firestore.collection('usuarios').doc(tablero.creadorId);
-      await usuarioRef.update({
+      await usuarioRef.set({
         'tablerosIds': FieldValue.arrayUnion([docRef.id])
-      });
+      }, SetOptions(merge: true));
 
       return docRef.id;
     } catch (e) {
@@ -106,78 +124,118 @@ class FirestoreService {
     }
   }
   Future<List<Usuario>> buscarUsuarios(String texto) async {
+    try {
+      QuerySnapshot<Map<String, dynamic>> snapshot;
+      try {
+        snapshot = await _firestore
+            .collection('usuarios')
+            .where('email', isGreaterThanOrEqualTo: texto)
+            .where('email', isLessThanOrEqualTo: '$texto\uf8ff')
+            .get(const GetOptions(source: Source.serverAndCache));
+      } catch (_) {
+        snapshot = await _firestore
+            .collection('usuarios')
+            .where('email', isGreaterThanOrEqualTo: texto)
+            .where('email', isLessThanOrEqualTo: '$texto\uf8ff')
+            .get(const GetOptions(source: Source.cache));
+      }
 
-    final snapshot = await _firestore
-        .collection('usuarios')
-        .where('email', isGreaterThanOrEqualTo: texto)
-        .where('email', isLessThanOrEqualTo: '$texto\uf8ff')
-        .get();
-
-    return snapshot.docs
-        .map((doc) => Usuario.fromMap(doc.id, doc.data()))
-        .toList();
+      return snapshot.docs
+          .map((doc) => Usuario.fromMap(doc.id, doc.data()))
+          .toList();
+    } catch (_) {
+      return [];
+    }
   }
   
   Future<Usuario?> obtenerUsuarioPorEmail(String email) async {
     try {
-      final snapshot = await _firestore
-          .collection('usuarios')
-          .where('email', isEqualTo: email.trim())
-          .limit(1)
-          .get();
+      QuerySnapshot<Map<String, dynamic>> snapshot;
+      try {
+        snapshot = await _firestore
+            .collection('usuarios')
+            .where('email', isEqualTo: email.trim())
+            .limit(1)
+            .get(const GetOptions(source: Source.serverAndCache));
+      } catch (_) {
+        snapshot = await _firestore
+            .collection('usuarios')
+            .where('email', isEqualTo: email.trim())
+            .limit(1)
+            .get(const GetOptions(source: Source.cache));
+      }
       if (snapshot.docs.isNotEmpty) {
         final doc = snapshot.docs.first;
         return Usuario.fromMap(doc.id, doc.data());
       }
       return null;
     } catch (e) {
-      throw Exception('Error al obtener usuario por email: $e');
+      return null;
     }
   }
   Future<Usuario?> obtenerUsuarioPorId(String id) async {
+    try {
+      DocumentSnapshot<Map<String, dynamic>> doc;
+      try {
+        doc = await _firestore.collection('usuarios').doc(id).get(const GetOptions(source: Source.serverAndCache));
+      } catch (_) {
+        doc = await _firestore.collection('usuarios').doc(id).get(const GetOptions(source: Source.cache));
+      }
 
-    final doc = await _firestore
-        .collection('usuarios')
-        .doc(id)
-        .get();
-
-    if(doc.exists){
-
-      return Usuario.fromMap(
-        doc.id,
-        doc.data()!,
-      );
-
+      if (doc.exists && doc.data() != null) {
+        return Usuario.fromMap(
+          doc.id,
+          doc.data()!,
+        );
+      }
+      return null;
+    } catch (_) {
+      return null;
     }
-
-    return null;
   }
   Future<List<Tablero>> obtenerTablerosDeUsuario(String userId) async {
     try {
-      final querySnapshot = await _firestore
-          .collection('tableros')
-          .where('miembrosIds', arrayContains: userId)
-          .where('activo', isEqualTo: true)
-          .orderBy('fechaCreacion', descending: true)
-          .get();
+      QuerySnapshot<Map<String, dynamic>> querySnapshot;
+      try {
+        querySnapshot = await _firestore
+            .collection('tableros')
+            .where('miembrosIds', arrayContains: userId)
+            .where('activo', isEqualTo: true)
+            .orderBy('fechaCreacion', descending: true)
+            .get(const GetOptions(source: Source.serverAndCache));
+      } catch (_) {
+        // Fallback a consulta en cache sin orderBy (por si falta indice local offline)
+        querySnapshot = await _firestore
+            .collection('tableros')
+            .where('miembrosIds', arrayContains: userId)
+            .where('activo', isEqualTo: true)
+            .get(const GetOptions(source: Source.cache));
+      }
 
-      return querySnapshot.docs
+      final docs = querySnapshot.docs
           .map((doc) => Tablero.fromMap(doc.id, doc.data()))
           .toList();
+      docs.sort((a, b) => b.fechaCreacion.compareTo(a.fechaCreacion));
+      return docs;
     } catch (e) {
-      throw Exception('Error al obtener tableros: $e');
+      return [];
     }
   }
 
   Future<Tablero?> obtenerTablero(String tableroId) async {
     try {
-      final doc = await _firestore.collection('tableros').doc(tableroId).get();
-      if (doc.exists) {
+      DocumentSnapshot<Map<String, dynamic>> doc;
+      try {
+        doc = await _firestore.collection('tableros').doc(tableroId).get(const GetOptions(source: Source.serverAndCache));
+      } catch (_) {
+        doc = await _firestore.collection('tableros').doc(tableroId).get(const GetOptions(source: Source.cache));
+      }
+      if (doc.exists && doc.data() != null) {
         return Tablero.fromMap(doc.id, doc.data()!);
       }
       return null;
     } catch (e) {
-      throw Exception('Error al obtener tablero: $e');
+      return null;
     }
   }
 
@@ -185,7 +243,7 @@ class FirestoreService {
     try {
       final data = tablero.toMap();
       data['fechaActualizacion'] = Timestamp.now();
-      await _firestore.collection('tableros').doc(tablero.id).update(data);
+      await _firestore.collection('tableros').doc(tablero.id).set(data, SetOptions(merge: true));
     } catch (e) {
       throw Exception('Error al actualizar tablero: $e');
     }
@@ -237,19 +295,16 @@ class FirestoreService {
 
   Future<void> crearTareaConId(Tarea tarea) async {
     try {
-      print('PRUEBA: entrando a crearTareaConId');
-
       await _firestore
           .collection('tareas')
           .doc(tarea.id)
           .set(tarea.toMap());
 
-      print('PRUEBA: tarea guardada con ID ${tarea.id}');
-      print('PRUEBA: llamando al servicio de notificaciones');
-
-      await NotificacionVencimientoService.programar(tarea);
-
-      print('PRUEBA: terminó la programación');
+      try {
+        await NotificacionVencimientoService.programar(tarea);
+      } catch (e) {
+        print('Error al programar notificación local: $e');
+      }
     } catch (e, stackTrace) {
       print('ERROR al crear o programar la tarea: $e');
       print(stackTrace);
@@ -290,65 +345,101 @@ class FirestoreService {
 
   Future<List<Tarea>> obtenerTareasDeTablero(String tableroId) async {
     try {
-      final querySnapshot = await _firestore
-          .collection('tareas')
-          .where('tableroId', isEqualTo: tableroId)
-          .where('archivada', isEqualTo: false)
-          .orderBy('orden')
-          .get();
+      QuerySnapshot<Map<String, dynamic>> querySnapshot;
+      try {
+        querySnapshot = await _firestore
+            .collection('tareas')
+            .where('tableroId', isEqualTo: tableroId)
+            .where('archivada', isEqualTo: false)
+            .orderBy('orden')
+            .get(const GetOptions(source: Source.serverAndCache));
+      } catch (_) {
+        querySnapshot = await _firestore
+            .collection('tareas')
+            .where('tableroId', isEqualTo: tableroId)
+            .where('archivada', isEqualTo: false)
+            .get(const GetOptions(source: Source.cache));
+      }
 
-      return querySnapshot.docs
+      final docs = querySnapshot.docs
           .map((doc) => Tarea.fromMap(doc.id, doc.data()))
           .toList();
+      docs.sort((a, b) => a.orden.compareTo(b.orden));
+      return docs;
     } catch (e) {
-      throw Exception('Error al obtener tareas: $e');
+      return [];
     }
   }
 
   // Obtener tareas por estado específico
   Future<List<Tarea>> obtenerTareasPorEstado(String tableroId, String estado) async {
     try {
-      final querySnapshot = await _firestore
-          .collection('tareas')
-          .where('tableroId', isEqualTo: tableroId)
-          .where('estado', isEqualTo: estado)
-          .where('archivada', isEqualTo: false)
-          .orderBy('orden')
-          .get();
+      QuerySnapshot<Map<String, dynamic>> querySnapshot;
+      try {
+        querySnapshot = await _firestore
+            .collection('tareas')
+            .where('tableroId', isEqualTo: tableroId)
+            .where('estado', isEqualTo: estado)
+            .where('archivada', isEqualTo: false)
+            .orderBy('orden')
+            .get(const GetOptions(source: Source.serverAndCache));
+      } catch (_) {
+        querySnapshot = await _firestore
+            .collection('tareas')
+            .where('tableroId', isEqualTo: tableroId)
+            .where('estado', isEqualTo: estado)
+            .where('archivada', isEqualTo: false)
+            .get(const GetOptions(source: Source.cache));
+      }
 
-      return querySnapshot.docs
+      final docs = querySnapshot.docs
           .map((doc) => Tarea.fromMap(doc.id, doc.data()))
           .toList();
+      docs.sort((a, b) => a.orden.compareTo(b.orden));
+      return docs;
     } catch (e) {
-      throw Exception('Error al obtener tareas por estado: $e');
+      return [];
     }
   }
 
   Future<List<Tarea>> obtenerTareasCreadasPorUsuario(String userId) async {
     try {
-      final snapshot = await _firestore
-          .collection('tareas')
-          .where('creadaPor', isEqualTo: userId)
-          .get();
+      QuerySnapshot<Map<String, dynamic>> snapshot;
+      try {
+        snapshot = await _firestore
+            .collection('tareas')
+            .where('creadaPor', isEqualTo: userId)
+            .get(const GetOptions(source: Source.serverAndCache));
+      } catch (_) {
+        snapshot = await _firestore
+            .collection('tareas')
+            .where('creadaPor', isEqualTo: userId)
+            .get(const GetOptions(source: Source.cache));
+      }
 
       return snapshot.docs
           .map((doc) => Tarea.fromMap(doc.id, doc.data()))
-          .where((tarea) => !tarea.archivada) // filtramos en Dart, no en la query
+          .where((tarea) => !tarea.archivada)
           .toList();
     } catch (e) {
-      throw Exception('Error al obtener tareas del usuario: $e');
+      return [];
     }
   }
 
   Future<Tarea?> obtenerTarea(String tareaId) async {
     try {
-      final doc = await _firestore.collection('tareas').doc(tareaId).get();
-      if (doc.exists) {
+      DocumentSnapshot<Map<String, dynamic>> doc;
+      try {
+        doc = await _firestore.collection('tareas').doc(tareaId).get(const GetOptions(source: Source.serverAndCache));
+      } catch (_) {
+        doc = await _firestore.collection('tareas').doc(tareaId).get(const GetOptions(source: Source.cache));
+      }
+      if (doc.exists && doc.data() != null) {
         return Tarea.fromMap(doc.id, doc.data()!);
       }
       return null;
     } catch (e) {
-      throw Exception('Error al obtener tarea: $e');
+      return null;
     }
   }
 
@@ -360,10 +451,11 @@ class FirestoreService {
       await _firestore
           .collection('tareas')
           .doc(tarea.id)
-          .update(data);
+          .set(data, SetOptions(merge: true));
 
-      // Reprogramar según la fecha, el título y el estado actuales.
-      await NotificacionVencimientoService.programar(tarea);
+      try {
+        await NotificacionVencimientoService.programar(tarea);
+      } catch (_) {}
     } catch (e) {
       throw Exception('Error al actualizar tarea: $e');
     }
@@ -374,18 +466,19 @@ class FirestoreService {
       String nuevoEstado,
       ) async {
     try {
-      await _firestore.collection('tareas').doc(tareaId).update({
+      await _firestore.collection('tareas').doc(tareaId).set({
         'estado': nuevoEstado,
         'fechaActualizacion': Timestamp.now(),
-      });
+      }, SetOptions(merge: true));
 
-      // Obtener la tarea actualizada para programar o cancelar el aviso.
       final tareaActualizada = await obtenerTarea(tareaId);
 
       if (tareaActualizada != null) {
-        await NotificacionVencimientoService.programar(
-          tareaActualizada,
-        );
+        try {
+          await NotificacionVencimientoService.programar(
+            tareaActualizada,
+          );
+        } catch (_) {}
       }
     } catch (e) {
       throw Exception('Error al actualizar estado de tarea: $e');
@@ -411,13 +504,14 @@ class FirestoreService {
 
   Future<void> eliminarTarea(String tareaId) async {
     try {
-      await _firestore.collection('tareas').doc(tareaId).update({
+      await _firestore.collection('tareas').doc(tareaId).set({
         'archivada': true,
         'fechaActualizacion': Timestamp.now(),
-      });
+      }, SetOptions(merge: true));
 
-      // Cancelar la notificación local.
-      await NotificacionVencimientoService.cancelar(tareaId);
+      try {
+        await NotificacionVencimientoService.cancelar(tareaId);
+      } catch (_) {}
     } catch (e) {
       throw Exception('Error al eliminar tarea: $e');
     }
