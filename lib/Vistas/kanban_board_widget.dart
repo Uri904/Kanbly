@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -38,7 +39,74 @@ class KanbanBoardWidget extends StatefulWidget {
 class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final FirestoreService _firestoreService = FirestoreService();
+  final ScrollController _scrollController = ScrollController();
   String _criterioOrden = 'fechaCreacion';
+  bool _isDraggingTask = false;
+  Timer? _autoScrollTimer;
+  double _lastDragDx = -1;
+  double _lastScreenWidth = 0;
+
+  @override
+  void dispose() {
+    _autoScrollTimer?.cancel();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _iniciarDrag() {
+    if (mounted) {
+      setState(() {
+        _isDraggingTask = true;
+      });
+    }
+  }
+
+  void _detenerDrag() {
+    _autoScrollTimer?.cancel();
+    _autoScrollTimer = null;
+    _lastDragDx = -1;
+    if (mounted && _isDraggingTask) {
+      setState(() {
+        _isDraggingTask = false;
+      });
+    }
+  }
+
+  void _mananejarAutoScroll(DragUpdateDetails details, double screenWidth) {
+    _lastDragDx = details.globalPosition.dx;
+    _lastScreenWidth = screenWidth;
+    final edgeThreshold = screenWidth * 0.25;
+
+    final isNearLeft = _lastDragDx < edgeThreshold;
+    final isNearRight = _lastDragDx > screenWidth - edgeThreshold;
+
+    if (isNearLeft || isNearRight) {
+      if (_autoScrollTimer == null || !_autoScrollTimer!.isActive) {
+        _autoScrollTimer = Timer.periodic(const Duration(milliseconds: 20), (timer) {
+          if (!_scrollController.hasClients || !_scrollController.position.hasContentDimensions || _lastDragDx < 0) {
+            timer.cancel();
+            return;
+          }
+          final maxScroll = _scrollController.position.maxScrollExtent;
+          if (maxScroll <= 0) return;
+
+          const scrollStep = 18.0;
+          if (_lastDragDx < edgeThreshold) {
+            final target = (_scrollController.offset - scrollStep).clamp(0.0, maxScroll);
+            _scrollController.jumpTo(target);
+          } else if (_lastDragDx > _lastScreenWidth - edgeThreshold) {
+            final target = (_scrollController.offset + scrollStep).clamp(0.0, maxScroll);
+            _scrollController.jumpTo(target);
+          } else {
+            timer.cancel();
+          }
+        });
+      }
+    } else {
+      _autoScrollTimer?.cancel();
+      _autoScrollTimer = null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -348,6 +416,7 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                       // total de la pantalla y fallaba en horizontal).
                       return LayoutBuilder(
                         builder: (context, viewport) => SingleChildScrollView(
+                          controller: _scrollController,
                           scrollDirection: Axis.horizontal,
                           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                           child: Row(
@@ -382,11 +451,124 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                     },
                   ),
                 ),
+
+                // --- ZONA DE ELIMINACIÓN AL ARRASTRAR (DRAG TO DELETE) ---
+                _construirZonaEliminacion(permisos),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  // Widget para soltar y eliminar una tarea arrastrada
+  Widget _construirZonaEliminacion(PermisosMiembro permisos) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+      height: _isDraggingTask ? 64 : 0,
+      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      child: SingleChildScrollView(
+        physics: const NeverScrollableScrollPhysics(),
+        child: SizedBox(
+          height: 64,
+          child: DragTarget<Tarea>(
+            onWillAcceptWithDetails: (details) => true,
+            onAcceptWithDetails: (details) async {
+              final tarea = details.data;
+              _detenerDrag();
+
+              if (!permisos.eliminarTareas) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('No tienes permiso para eliminar tareas en este tablero'),
+                      backgroundColor: Colors.redAccent,
+                    ),
+                  );
+                }
+                return;
+              }
+
+              final confirmar = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Eliminar tarea'),
+                  content: Text('¿Deseas eliminar la tarea "${tarea.titulo}"?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancelar'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Eliminar', style: TextStyle(color: Colors.red)),
+                    ),
+                  ],
+                ),
+              );
+
+              if (confirmar == true) {
+                try {
+                  await _firestoreService.eliminarTarea(tarea.id);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Tarea "${tarea.titulo}" eliminada'),
+                        backgroundColor: Colors.redAccent,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error al eliminar tarea: $e')),
+                    );
+                  }
+                }
+              }
+            },
+            builder: (context, candidateData, rejectedData) {
+              final isHovered = candidateData.isNotEmpty;
+              final Color colorFondo = isHovered ? Colors.red.shade700 : Colors.red.shade400;
+
+              return Container(
+                decoration: BoxDecoration(
+                  color: colorFondo,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.red.withOpacity(0.3),
+                      blurRadius: isHovered ? 12 : 6,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      isHovered ? Icons.delete_forever_rounded : Icons.delete_outline_rounded,
+                      color: Colors.white,
+                      size: isHovered ? 28 : 24,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      isHovered ? '¡Soltar para eliminar!' : 'Arrastra aquí para eliminar la tarea',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: isHovered ? 15 : 13,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
     );
   }
 
@@ -404,6 +586,7 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
   }) {
     return DragTarget<Tarea>(
       onAcceptWithDetails: (details) async {
+        _detenerDrag();
         if (!permisos.moverTareas) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -520,10 +703,25 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                       padding: const EdgeInsets.only(bottom: 12),
                       child: LongPressDraggable<Tarea>(
                         data: tarea,
-                        maxSimultaneousDrags: permisos.moverTareas ? 1 : 0,
+                        maxSimultaneousDrags: (permisos.moverTareas || permisos.eliminarTareas) ? 1 : 0,
                         delay: const Duration(milliseconds: 150),
                         hapticFeedbackOnStart: true,
                         axis: null,
+                        onDragStarted: () {
+                          _iniciarDrag();
+                        },
+                        onDragUpdate: (details) {
+                          _mananejarAutoScroll(details, MediaQuery.sizeOf(context).width);
+                        },
+                        onDragCompleted: () {
+                          _detenerDrag();
+                        },
+                        onDragEnd: (_) {
+                          _detenerDrag();
+                        },
+                        onDraggableCanceled: (_, __) {
+                          _detenerDrag();
+                        },
                         feedback: Material(
                           type: MaterialType.transparency,
                           child: Transform.scale(

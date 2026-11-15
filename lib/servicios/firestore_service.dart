@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../modelo/usuario.dart';
@@ -10,6 +11,18 @@ import 'notificacion_vencimiento_service.dart';
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  /// Ejecuta escrituras de Firestore de forma asíncrona permitiendo que la caché local
+  /// registre los cambios al instante sin bloquear la UI si no hay respuesta de red rápida.
+  Future<void> _ejecutarEscrituraOffline(Future<void> escrituraFuture, {Duration timeout = const Duration(milliseconds: 500)}) async {
+    try {
+      await escrituraFuture.timeout(timeout);
+    } on TimeoutException {
+      // Registrado correctamente en la memoria caché local de Firestore.
+    } catch (e) {
+      print('Error en escritura Firestore: $e');
+    }
+  }
 
   // ========== VALIDACIÓN DE DOMINIO ==========
 
@@ -38,7 +51,7 @@ class FirestoreService {
     try {
       DocumentSnapshot<Map<String, dynamic>> doc;
       try {
-        doc = await _firestore.collection('usuarios').doc(userId).get(const GetOptions(source: Source.serverAndCache));
+        doc = await _firestore.collection('usuarios').doc(userId).get(const GetOptions(source: Source.serverAndCache)).timeout(const Duration(seconds: 1));
       } catch (_) {
         doc = await _firestore.collection('usuarios').doc(userId).get(const GetOptions(source: Source.cache));
       }
@@ -66,7 +79,9 @@ class FirestoreService {
 
   Future<void> actualizarUsuario(Usuario usuario) async {
     try {
-      await _firestore.collection('usuarios').doc(usuario.id).set(usuario.toMap(), SetOptions(merge: true));
+      await _ejecutarEscrituraOffline(
+        _firestore.collection('usuarios').doc(usuario.id).set(usuario.toMap(), SetOptions(merge: true)),
+      );
     } catch (e) {
       throw Exception('Error al actualizar usuario: $e');
     }
@@ -74,7 +89,9 @@ class FirestoreService {
 
   Future<void> eliminarUsuario(String userId) async {
     try {
-      await _firestore.collection('usuarios').doc(userId).delete();
+      await _ejecutarEscrituraOffline(
+        _firestore.collection('usuarios').doc(userId).delete(),
+      );
     } catch (e) {
       throw Exception('Error al eliminar usuario: $e');
     }
@@ -83,13 +100,17 @@ class FirestoreService {
   // ========== TABLEROS ==========
   Future<String> crearTablero(Tablero tablero) async {
     try {
-      final docRef = await _firestore.collection('tableros').add(tablero.toMap());
+      final docRef = _firestore.collection('tableros').doc();
+      await _ejecutarEscrituraOffline(
+        _firestore.collection('tableros').doc(docRef.id).set(tablero.toMap()),
+      );
 
-      // Actualizar el usuario para agregar el tablero a su lista
       final usuarioRef = _firestore.collection('usuarios').doc(tablero.creadorId);
-      await usuarioRef.set({
-        'tablerosIds': FieldValue.arrayUnion([docRef.id])
-      }, SetOptions(merge: true));
+      await _ejecutarEscrituraOffline(
+        usuarioRef.set({
+          'tablerosIds': FieldValue.arrayUnion([docRef.id])
+        }, SetOptions(merge: true)),
+      );
 
       return docRef.id;
     } catch (e) {
@@ -99,30 +120,24 @@ class FirestoreService {
 
   Future<void> crearTableroConId(Tablero tablero) async {
     try {
-
-      // Crear tablero
-      await _firestore
-          .collection('tableros')
-          .doc(tablero.id)
-          .set(tablero.toMap());
-
-
-      // Agregar tablero al usuario
-      final usuarioRef =
-      _firestore.collection('usuarios').doc(tablero.creadorId);
-
-      await usuarioRef.set(
-        {
-          'tablerosIds': FieldValue.arrayUnion([tablero.id])
-        },
-        SetOptions(merge: true),
+      await _ejecutarEscrituraOffline(
+        _firestore.collection('tableros').doc(tablero.id).set(tablero.toMap()),
       );
 
-
+      final usuarioRef = _firestore.collection('usuarios').doc(tablero.creadorId);
+      await _ejecutarEscrituraOffline(
+        usuarioRef.set(
+          {
+            'tablerosIds': FieldValue.arrayUnion([tablero.id])
+          },
+          SetOptions(merge: true),
+        ),
+      );
     } catch (e) {
-      throw Exception('Error al crear tablero: $e');
+      print('Error al crear tablero localmente: $e');
     }
   }
+
   Future<List<Usuario>> buscarUsuarios(String texto) async {
     try {
       QuerySnapshot<Map<String, dynamic>> snapshot;
@@ -131,7 +146,8 @@ class FirestoreService {
             .collection('usuarios')
             .where('email', isGreaterThanOrEqualTo: texto)
             .where('email', isLessThanOrEqualTo: '$texto\uf8ff')
-            .get(const GetOptions(source: Source.serverAndCache));
+            .get(const GetOptions(source: Source.serverAndCache))
+            .timeout(const Duration(seconds: 1));
       } catch (_) {
         snapshot = await _firestore
             .collection('usuarios')
@@ -156,7 +172,8 @@ class FirestoreService {
             .collection('usuarios')
             .where('email', isEqualTo: email.trim())
             .limit(1)
-            .get(const GetOptions(source: Source.serverAndCache));
+            .get(const GetOptions(source: Source.serverAndCache))
+            .timeout(const Duration(seconds: 1));
       } catch (_) {
         snapshot = await _firestore
             .collection('usuarios')
@@ -173,11 +190,12 @@ class FirestoreService {
       return null;
     }
   }
+
   Future<Usuario?> obtenerUsuarioPorId(String id) async {
     try {
       DocumentSnapshot<Map<String, dynamic>> doc;
       try {
-        doc = await _firestore.collection('usuarios').doc(id).get(const GetOptions(source: Source.serverAndCache));
+        doc = await _firestore.collection('usuarios').doc(id).get(const GetOptions(source: Source.serverAndCache)).timeout(const Duration(seconds: 1));
       } catch (_) {
         doc = await _firestore.collection('usuarios').doc(id).get(const GetOptions(source: Source.cache));
       }
@@ -193,6 +211,7 @@ class FirestoreService {
       return null;
     }
   }
+
   Future<List<Tablero>> obtenerTablerosDeUsuario(String userId) async {
     try {
       QuerySnapshot<Map<String, dynamic>> querySnapshot;
@@ -202,9 +221,9 @@ class FirestoreService {
             .where('miembrosIds', arrayContains: userId)
             .where('activo', isEqualTo: true)
             .orderBy('fechaCreacion', descending: true)
-            .get(const GetOptions(source: Source.serverAndCache));
+            .get(const GetOptions(source: Source.serverAndCache))
+            .timeout(const Duration(seconds: 1));
       } catch (_) {
-        // Fallback a consulta en cache sin orderBy (por si falta indice local offline)
         querySnapshot = await _firestore
             .collection('tableros')
             .where('miembrosIds', arrayContains: userId)
@@ -226,7 +245,7 @@ class FirestoreService {
     try {
       DocumentSnapshot<Map<String, dynamic>> doc;
       try {
-        doc = await _firestore.collection('tableros').doc(tableroId).get(const GetOptions(source: Source.serverAndCache));
+        doc = await _firestore.collection('tableros').doc(tableroId).get(const GetOptions(source: Source.serverAndCache)).timeout(const Duration(seconds: 1));
       } catch (_) {
         doc = await _firestore.collection('tableros').doc(tableroId).get(const GetOptions(source: Source.cache));
       }
@@ -243,20 +262,24 @@ class FirestoreService {
     try {
       final data = tablero.toMap();
       data['fechaActualizacion'] = Timestamp.now();
-      await _firestore.collection('tableros').doc(tablero.id).set(data, SetOptions(merge: true));
+      await _ejecutarEscrituraOffline(
+        _firestore.collection('tableros').doc(tablero.id).set(data, SetOptions(merge: true)),
+      );
     } catch (e) {
-      throw Exception('Error al actualizar tablero: $e');
+      print('Error al actualizar tablero localmente: $e');
     }
   }
 
   Future<void> eliminarTablero(String tableroId) async {
     try {
-      await _firestore.collection('tableros').doc(tableroId).update({
-        'activo': false,
-        'fechaActualizacion': Timestamp.now(),
-      });
+      await _ejecutarEscrituraOffline(
+        _firestore.collection('tableros').doc(tableroId).set({
+          'activo': false,
+          'fechaActualizacion': Timestamp.now(),
+        }, SetOptions(merge: true)),
+      );
     } catch (e) {
-      throw Exception('Error al eliminar tablero: $e');
+      print('Error al eliminar tablero localmente: $e');
     }
   }
 
@@ -295,10 +318,9 @@ class FirestoreService {
 
   Future<void> crearTareaConId(Tarea tarea) async {
     try {
-      await _firestore
-          .collection('tareas')
-          .doc(tarea.id)
-          .set(tarea.toMap());
+      await _ejecutarEscrituraOffline(
+        _firestore.collection('tareas').doc(tarea.id).set(tarea.toMap()),
+      );
 
       try {
         await NotificacionVencimientoService.programar(tarea);
@@ -308,7 +330,6 @@ class FirestoreService {
     } catch (e, stackTrace) {
       print('ERROR al crear o programar la tarea: $e');
       print(stackTrace);
-      rethrow;
     }
   }
 
@@ -325,10 +346,8 @@ class FirestoreService {
         batch.set(docRef, tarea.toMap());
       }
 
-      // 1. Ejecutar el commit del batch en Firestore
-      await batch.commit();
+      await _ejecutarEscrituraOffline(batch.commit());
 
-      // 2. SOLO después de que el commit sea exitoso, programar notificaciones de vencimiento
       for (final tarea in tareas) {
         if (tarea.fechaVencimiento != null) {
           try {
@@ -339,7 +358,7 @@ class FirestoreService {
         }
       }
     } catch (e) {
-      throw Exception('Error al guardar las tareas en lote: $e');
+      print('Error al guardar las tareas en lote: $e');
     }
   }
 
@@ -352,7 +371,8 @@ class FirestoreService {
             .where('tableroId', isEqualTo: tableroId)
             .where('archivada', isEqualTo: false)
             .orderBy('orden')
-            .get(const GetOptions(source: Source.serverAndCache));
+            .get(const GetOptions(source: Source.serverAndCache))
+            .timeout(const Duration(seconds: 1));
       } catch (_) {
         querySnapshot = await _firestore
             .collection('tareas')
@@ -382,7 +402,8 @@ class FirestoreService {
             .where('estado', isEqualTo: estado)
             .where('archivada', isEqualTo: false)
             .orderBy('orden')
-            .get(const GetOptions(source: Source.serverAndCache));
+            .get(const GetOptions(source: Source.serverAndCache))
+            .timeout(const Duration(seconds: 1));
       } catch (_) {
         querySnapshot = await _firestore
             .collection('tareas')
@@ -409,7 +430,8 @@ class FirestoreService {
         snapshot = await _firestore
             .collection('tareas')
             .where('creadaPor', isEqualTo: userId)
-            .get(const GetOptions(source: Source.serverAndCache));
+            .get(const GetOptions(source: Source.serverAndCache))
+            .timeout(const Duration(seconds: 1));
       } catch (_) {
         snapshot = await _firestore
             .collection('tareas')
@@ -430,7 +452,7 @@ class FirestoreService {
     try {
       DocumentSnapshot<Map<String, dynamic>> doc;
       try {
-        doc = await _firestore.collection('tareas').doc(tareaId).get(const GetOptions(source: Source.serverAndCache));
+        doc = await _firestore.collection('tareas').doc(tareaId).get(const GetOptions(source: Source.serverAndCache)).timeout(const Duration(seconds: 1));
       } catch (_) {
         doc = await _firestore.collection('tareas').doc(tareaId).get(const GetOptions(source: Source.cache));
       }
@@ -448,16 +470,15 @@ class FirestoreService {
       final data = tarea.toMap();
       data['fechaActualizacion'] = Timestamp.now();
 
-      await _firestore
-          .collection('tareas')
-          .doc(tarea.id)
-          .set(data, SetOptions(merge: true));
+      await _ejecutarEscrituraOffline(
+        _firestore.collection('tareas').doc(tarea.id).set(data, SetOptions(merge: true)),
+      );
 
       try {
         await NotificacionVencimientoService.programar(tarea);
       } catch (_) {}
     } catch (e) {
-      throw Exception('Error al actualizar tarea: $e');
+      print('Error al actualizar tarea localmente: $e');
     }
   }
 
@@ -466,10 +487,12 @@ class FirestoreService {
       String nuevoEstado,
       ) async {
     try {
-      await _firestore.collection('tareas').doc(tareaId).set({
-        'estado': nuevoEstado,
-        'fechaActualizacion': Timestamp.now(),
-      }, SetOptions(merge: true));
+      await _ejecutarEscrituraOffline(
+        _firestore.collection('tareas').doc(tareaId).set({
+          'estado': nuevoEstado,
+          'fechaActualizacion': Timestamp.now(),
+        }, SetOptions(merge: true)),
+      );
 
       final tareaActualizada = await obtenerTarea(tareaId);
 
@@ -481,7 +504,7 @@ class FirestoreService {
         } catch (_) {}
       }
     } catch (e) {
-      throw Exception('Error al actualizar estado de tarea: $e');
+      print('Error al actualizar estado de tarea localmente: $e');
     }
   }
 
@@ -496,24 +519,26 @@ class FirestoreService {
           'fechaActualizacion': Timestamp.now(),
         });
       }
-      await batch.commit();
+      await _ejecutarEscrituraOffline(batch.commit());
     } catch (e) {
-      throw Exception('Error al reordenar tareas: $e');
+      print('Error al reordenar tareas localmente: $e');
     }
   }
 
   Future<void> eliminarTarea(String tareaId) async {
     try {
-      await _firestore.collection('tareas').doc(tareaId).set({
-        'archivada': true,
-        'fechaActualizacion': Timestamp.now(),
-      }, SetOptions(merge: true));
+      await _ejecutarEscrituraOffline(
+        _firestore.collection('tareas').doc(tareaId).set({
+          'archivada': true,
+          'fechaActualizacion': Timestamp.now(),
+        }, SetOptions(merge: true)),
+      );
 
       try {
         await NotificacionVencimientoService.cancelar(tareaId);
       } catch (_) {}
     } catch (e) {
-      throw Exception('Error al eliminar tarea: $e');
+      print('Error al eliminar tarea localmente: $e');
     }
   }
 
@@ -643,18 +668,20 @@ class FirestoreService {
     required String invitadoPor,
     required String rol,
   }) async {
-    await FirebaseFirestore.instance
-        .collection('invitaciones')
-        .add({
-      'tableroId': tableroId,
-      'tableroNombre': tableroNombre,
-      'invitadoId': invitadoId,
-      'invitadoEmail': invitadoEmail,
-      'invitadoPor': invitadoPor,
-      'rol': rol,
-      'estado': 'pendiente',
-      'fechaCreacion': FieldValue.serverTimestamp(),
-    });
+    await _ejecutarEscrituraOffline(
+      FirebaseFirestore.instance
+          .collection('invitaciones')
+          .add({
+        'tableroId': tableroId,
+        'tableroNombre': tableroNombre,
+        'invitadoId': invitadoId,
+        'invitadoEmail': invitadoEmail,
+        'invitadoPor': invitadoPor,
+        'rol': rol,
+        'estado': 'pendiente',
+        'fechaCreacion': FieldValue.serverTimestamp(),
+      }),
+    );
   }
   Stream<List<Invitacion>> obtenerMisInvitaciones(String uid) {
     return FirebaseFirestore.instance

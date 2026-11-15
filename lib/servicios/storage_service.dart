@@ -34,8 +34,8 @@ class StorageService {
         ..fields['upload_preset'] = uploadPreset
         ..files.add(await http.MultipartFile.fromPath('file', file.path));
 
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 2));
+      final response = await http.Response.fromStream(streamedResponse).timeout(const Duration(seconds: 2));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
