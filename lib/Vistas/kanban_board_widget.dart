@@ -40,16 +40,26 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final FirestoreService _firestoreService = FirestoreService();
   final ScrollController _scrollController = ScrollController();
+  final Map<String, ScrollController> _columnScrollControllers = {};
   String _criterioOrden = 'fechaCreacion';
   bool _isDraggingTask = false;
   Timer? _autoScrollTimer;
   double _lastDragDx = -1;
+  double _lastDragDy = -1;
   double _lastScreenWidth = 0;
+  double _lastScreenHeight = 0;
+
+  ScrollController _obtenerScrollControllerColumna(String estadoNombre) {
+    return _columnScrollControllers.putIfAbsent(estadoNombre, () => ScrollController());
+  }
 
   @override
   void dispose() {
     _autoScrollTimer?.cancel();
     _scrollController.dispose();
+    for (final controller in _columnScrollControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -58,6 +68,7 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
       setState(() {
         _isDraggingTask = true;
       });
+      _iniciarAutoScrollLoop();
     }
   }
 
@@ -65,6 +76,7 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
     _autoScrollTimer?.cancel();
     _autoScrollTimer = null;
     _lastDragDx = -1;
+    _lastDragDy = -1;
     if (mounted && _isDraggingTask) {
       setState(() {
         _isDraggingTask = false;
@@ -72,39 +84,76 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
     }
   }
 
-  void _mananejarAutoScroll(DragUpdateDetails details, double screenWidth) {
-    _lastDragDx = details.globalPosition.dx;
-    _lastScreenWidth = screenWidth;
-    final edgeThreshold = screenWidth * 0.25;
+  void _iniciarAutoScrollLoop() {
+    if (_autoScrollTimer != null && _autoScrollTimer!.isActive) return;
 
-    final isNearLeft = _lastDragDx < edgeThreshold;
-    final isNearRight = _lastDragDx > screenWidth - edgeThreshold;
-
-    if (isNearLeft || isNearRight) {
-      if (_autoScrollTimer == null || !_autoScrollTimer!.isActive) {
-        _autoScrollTimer = Timer.periodic(const Duration(milliseconds: 20), (timer) {
-          if (!_scrollController.hasClients || !_scrollController.position.hasContentDimensions || _lastDragDx < 0) {
-            timer.cancel();
-            return;
-          }
-          final maxScroll = _scrollController.position.maxScrollExtent;
-          if (maxScroll <= 0) return;
-
-          const scrollStep = 18.0;
-          if (_lastDragDx < edgeThreshold) {
-            final target = (_scrollController.offset - scrollStep).clamp(0.0, maxScroll);
-            _scrollController.jumpTo(target);
-          } else if (_lastDragDx > _lastScreenWidth - edgeThreshold) {
-            final target = (_scrollController.offset + scrollStep).clamp(0.0, maxScroll);
-            _scrollController.jumpTo(target);
-          } else {
-            timer.cancel();
-          }
-        });
+    _autoScrollTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
+      if (!_isDraggingTask || _lastDragDx < 0 || _lastDragDy < 0) {
+        timer.cancel();
+        _autoScrollTimer = null;
+        return;
       }
-    } else {
-      _autoScrollTimer?.cancel();
-      _autoScrollTimer = null;
+
+      final horizontalMargin = (_lastScreenWidth > 0 ? _lastScreenWidth * 0.28 : 130.0).clamp(100.0, 180.0);
+      const topVerticalMargin = 170.0;
+      final bottomVerticalMargin = _lastScreenHeight > 0 ? _lastScreenHeight - 120.0 : 550.0;
+
+      final isNearLeft = _lastDragDx > 0 && _lastDragDx < horizontalMargin;
+      final isNearRight = _lastScreenWidth > 0 && _lastDragDx > _lastScreenWidth - horizontalMargin;
+
+      final isNearTop = _lastDragDy > 0 && _lastDragDy < topVerticalMargin;
+      final isNearBottom = _lastScreenHeight > 0 && _lastDragDy > bottomVerticalMargin;
+
+      // 1. AUTO-SCROLL HORIZONTAL DEL TABLERO
+      if (_scrollController.hasClients && _scrollController.position.hasContentDimensions) {
+        final maxScroll = _scrollController.position.maxScrollExtent;
+        if (maxScroll > 0) {
+          if (isNearLeft) {
+            final factor = ((horizontalMargin - _lastDragDx) / horizontalMargin).clamp(0.1, 1.0);
+            final step = 5.0 + factor * 16.0;
+            final target = (_scrollController.offset - step).clamp(0.0, maxScroll);
+            _scrollController.jumpTo(target);
+          } else if (isNearRight) {
+            final factor = ((_lastDragDx - (_lastScreenWidth - horizontalMargin)) / horizontalMargin).clamp(0.1, 1.0);
+            final step = 5.0 + factor * 16.0;
+            final target = (_scrollController.offset + step).clamp(0.0, maxScroll);
+            _scrollController.jumpTo(target);
+          }
+        }
+      }
+
+      // 2. AUTO-SCROLL VERTICAL DE COLUMNAS
+      if (isNearTop || isNearBottom) {
+        for (final colController in _columnScrollControllers.values) {
+          if (colController.hasClients && colController.position.hasContentDimensions) {
+            final maxColScroll = colController.position.maxScrollExtent;
+            if (maxColScroll > 0) {
+              if (isNearTop) {
+                final factor = ((topVerticalMargin - _lastDragDy) / topVerticalMargin).clamp(0.1, 1.0);
+                final step = 3.0 + factor * 12.0;
+                final target = (colController.offset - step).clamp(0.0, maxColScroll);
+                colController.jumpTo(target);
+              } else if (isNearBottom) {
+                final factor = ((_lastDragDy - bottomVerticalMargin) / 120.0).clamp(0.1, 1.0);
+                final step = 3.0 + factor * 12.0;
+                final target = (colController.offset + step).clamp(0.0, maxColScroll);
+                colController.jumpTo(target);
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  void _mananejarAutoScroll(DragUpdateDetails details, double screenWidth, double screenHeight) {
+    _lastDragDx = details.globalPosition.dx;
+    _lastDragDy = details.globalPosition.dy;
+    _lastScreenWidth = screenWidth;
+    _lastScreenHeight = screenHeight;
+
+    if (_isDraggingTask) {
+      _iniciarAutoScrollLoop();
     }
   }
 
@@ -170,9 +219,35 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
               child: const Icon(Icons.add, color: Colors.white, size: 28),
             ),
 
-            body: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+            body: Listener(
+              onPointerDown: (event) {
+                _lastDragDx = event.position.dx;
+                _lastDragDy = event.position.dy;
+                _lastScreenWidth = MediaQuery.sizeOf(context).width;
+                _lastScreenHeight = MediaQuery.sizeOf(context).height;
+              },
+              onPointerMove: (event) {
+                _lastDragDx = event.position.dx;
+                _lastDragDy = event.position.dy;
+                _lastScreenWidth = MediaQuery.sizeOf(context).width;
+                _lastScreenHeight = MediaQuery.sizeOf(context).height;
+                if (_isDraggingTask) {
+                  _iniciarAutoScrollLoop();
+                }
+              },
+              onPointerUp: (_) {
+                if (_isDraggingTask) {
+                  _detenerDrag();
+                }
+              },
+              onPointerCancel: (_) {
+                if (_isDraggingTask) {
+                  _detenerDrag();
+                }
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                 SizedBox(height: horizontal ? 4 : 16),
 
                 // --- CABECERA DE LA VISTA DEL TABLERO ---
@@ -415,37 +490,137 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                       // espacio realmente disponible (antes dependía de la altura
                       // total de la pantalla y fallaba en horizontal).
                       return LayoutBuilder(
-                        builder: (context, viewport) => SingleChildScrollView(
-                          controller: _scrollController,
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: columnasList.asMap().entries.map((entry) {
-                              final index = entry.key;
-                              final colNombre = entry.value;
+                        builder: (context, viewport) => Stack(
+                          children: [
+                            SingleChildScrollView(
+                              controller: _scrollController,
+                              scrollDirection: Axis.horizontal,
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: columnasList.asMap().entries.map((entry) {
+                                  final index = entry.key;
+                                  final colNombre = entry.value;
 
-                              // BÚSQUEDA ROBUSTA Y GARANTÍA CERO PÉRDIDA DE TAREAS
-                              final tareasColumna = todasLasTareas.where((t) {
-                                return KanbanUtils.correspondeAColumna(t, colNombre, columnasList, index);
-                              }).toList();
+                                  // BÚSQUEDA ROBUSTA Y GARANTÍA CERO PÉRDIDA DE TAREAS
+                                  final tareasColumna = todasLasTareas.where((t) {
+                                    return KanbanUtils.correspondeAColumna(t, colNombre, columnasList, index);
+                                  }).toList();
 
-                              final colorHeader = paletaColoresHeaders[index % paletaColoresHeaders.length];
+                                  final colorHeader = paletaColoresHeaders[index % paletaColoresHeaders.length];
 
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 16),
-                                child: _construirColumna(
-                                  titulo: colNombre.toUpperCase(),
-                                  estadoNombre: colNombre,
-                                  tareas: tareasColumna,
-                                  colorHeader: colorHeader,
-                                  tablero: tableroActivo,
-                                  permisos: permisos,
-                                  alturaDisponible: viewport.maxHeight - 16,
+                                  return Padding(
+                                    padding: const EdgeInsets.only(right: 16),
+                                    child: _construirColumna(
+                                      titulo: colNombre.toUpperCase(),
+                                      estadoNombre: colNombre,
+                                      tareas: tareasColumna,
+                                      colorHeader: colorHeader,
+                                      tablero: tableroActivo,
+                                      permisos: permisos,
+                                      columnasList: columnasList,
+                                      alturaDisponible: viewport.maxHeight - 16,
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+
+                            // --- INDICADORES / HOTSPOTS VISUALES DE AUTO-SCROLL AL ARRASTRAR ---
+                            if (_isDraggingTask) ...[
+                              // Hotspot Borde Izquierdo
+                              Positioned(
+                                left: 0,
+                                top: 0,
+                                bottom: 0,
+                                width: 56,
+                                child: DragTarget<Tarea>(
+                                  onWillAcceptWithDetails: (_) {
+                                    _lastDragDx = 10;
+                                    _iniciarAutoScrollLoop();
+                                    return false;
+                                  },
+                                  onMove: (details) {
+                                    _lastDragDx = details.offset.dx;
+                                    _lastScreenWidth = MediaQuery.sizeOf(context).width;
+                                    _iniciarAutoScrollLoop();
+                                  },
+                                  builder: (context, candidateData, rejectedData) {
+                                    final isHovered = candidateData.isNotEmpty;
+                                    return AnimatedOpacity(
+                                      duration: const Duration(milliseconds: 200),
+                                      opacity: isHovered ? 0.9 : 0.6,
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              azulCielo.withOpacity(0.4),
+                                              azulCielo.withOpacity(0.0),
+                                            ],
+                                            begin: Alignment.centerLeft,
+                                            end: Alignment.centerRight,
+                                          ),
+                                        ),
+                                        child: const Center(
+                                          child: Icon(
+                                            Icons.arrow_back_ios_rounded,
+                                            color: Colors.white,
+                                            size: 26,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
-                              );
-                            }).toList(),
-                          ),
+                              ),
+
+                              // Hotspot Borde Derecho
+                              Positioned(
+                                right: 0,
+                                top: 0,
+                                bottom: 0,
+                                width: 56,
+                                child: DragTarget<Tarea>(
+                                  onWillAcceptWithDetails: (_) {
+                                    _lastDragDx = MediaQuery.sizeOf(context).width - 10;
+                                    _iniciarAutoScrollLoop();
+                                    return false;
+                                  },
+                                  onMove: (details) {
+                                    _lastDragDx = details.offset.dx;
+                                    _lastScreenWidth = MediaQuery.sizeOf(context).width;
+                                    _iniciarAutoScrollLoop();
+                                  },
+                                  builder: (context, candidateData, rejectedData) {
+                                    final isHovered = candidateData.isNotEmpty;
+                                    return AnimatedOpacity(
+                                      duration: const Duration(milliseconds: 200),
+                                      opacity: isHovered ? 0.9 : 0.6,
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              azulCielo.withOpacity(0.0),
+                                              azulCielo.withOpacity(0.4),
+                                            ],
+                                            begin: Alignment.centerLeft,
+                                            end: Alignment.centerRight,
+                                          ),
+                                        ),
+                                        child: const Center(
+                                          child: Icon(
+                                            Icons.arrow_forward_ios_rounded,
+                                            color: Colors.white,
+                                            size: 26,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       );
                     },
@@ -457,115 +632,149 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
               ],
             ),
           ),
-        );
+        ),
+      );
       },
     );
   }
 
-  // Widget para soltar y eliminar una tarea arrastrada
+  // Widget minimalista y moderno para soltar y eliminar una tarea arrastrada
   Widget _construirZonaEliminacion(PermisosMiembro permisos) {
+    final theme = Theme.of(context);
+    final bool isDark = theme.brightness == Brightness.dark;
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeInOut,
-      height: _isDraggingTask ? 64 : 0,
-      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-      child: SingleChildScrollView(
-        physics: const NeverScrollableScrollPhysics(),
-        child: SizedBox(
-          height: 64,
-          child: DragTarget<Tarea>(
-            onWillAcceptWithDetails: (details) => true,
-            onAcceptWithDetails: (details) async {
-              final tarea = details.data;
-              _detenerDrag();
+      height: _isDraggingTask ? 56 : 0,
+      margin: const EdgeInsets.only(bottom: 12, top: 4),
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 200),
+        opacity: _isDraggingTask ? 1.0 : 0.0,
+        child: SingleChildScrollView(
+          physics: const NeverScrollableScrollPhysics(),
+          child: Center(
+            child: SizedBox(
+              height: 48,
+              width: 250,
+              child: DragTarget<Tarea>(
+                onWillAcceptWithDetails: (details) => true,
+                onAcceptWithDetails: (details) async {
+                  final tarea = details.data;
+                  _detenerDrag();
 
-              if (!permisos.eliminarTareas) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('No tienes permiso para eliminar tareas en este tablero'),
-                      backgroundColor: Colors.redAccent,
+                  if (!permisos.eliminarTareas) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('No tienes permiso para eliminar tareas en este tablero'),
+                          backgroundColor: Colors.redAccent,
+                        ),
+                      );
+                    }
+                    return;
+                  }
+
+                  final confirmar = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Eliminar tarea'),
+                      content: Text('¿Deseas eliminar la tarea "${tarea.titulo}"?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancelar'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Eliminar', style: TextStyle(color: Colors.red)),
+                        ),
+                      ],
                     ),
                   );
-                }
-                return;
-              }
 
-              final confirmar = await showDialog<bool>(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Eliminar tarea'),
-                  content: Text('¿Deseas eliminar la tarea "${tarea.titulo}"?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Cancelar'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Eliminar', style: TextStyle(color: Colors.red)),
-                    ),
-                  ],
-                ),
-              );
-
-              if (confirmar == true) {
-                try {
-                  await _firestoreService.eliminarTarea(tarea.id);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Tarea "${tarea.titulo}" eliminada'),
-                        backgroundColor: Colors.redAccent,
-                      ),
-                    );
+                  if (confirmar == true) {
+                    try {
+                      await _firestoreService.eliminarTarea(tarea.id);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Tarea "${tarea.titulo}" eliminada'),
+                            backgroundColor: Colors.redAccent,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error al eliminar tarea: $e')),
+                        );
+                      }
+                    }
                   }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error al eliminar tarea: $e')),
-                    );
-                  }
-                }
-              }
-            },
-            builder: (context, candidateData, rejectedData) {
-              final isHovered = candidateData.isNotEmpty;
-              final Color colorFondo = isHovered ? Colors.red.shade700 : Colors.red.shade400;
+                },
+                builder: (context, candidateData, rejectedData) {
+                  final isHovered = candidateData.isNotEmpty;
 
-              return Container(
-                decoration: BoxDecoration(
-                  color: colorFondo,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.red.withOpacity(0.3),
-                      blurRadius: isHovered ? 12 : 6,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      isHovered ? Icons.delete_forever_rounded : Icons.delete_outline_rounded,
-                      color: Colors.white,
-                      size: isHovered ? 28 : 24,
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      isHovered ? '¡Soltar para eliminar!' : 'Arrastra aquí para eliminar la tarea',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: isHovered ? 15 : 13,
+                  // Píldora Flotante Minimalista y Moderna
+                  return AnimatedScale(
+                    scale: isHovered ? 1.05 : 1.0,
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isHovered
+                            ? const Color(0xFFE53E3E)
+                            : (isDark
+                                ? const Color(0xFF1E293B).withValues(alpha: 0.9)
+                                : Colors.white.withValues(alpha: 0.95)),
+                        borderRadius: BorderRadius.circular(28),
+                        border: Border.all(
+                          color: isHovered
+                              ? const Color(0xFFE53E3E)
+                              : const Color(0xFFE53E3E).withValues(alpha: 0.4),
+                          width: isHovered ? 1.8 : 1.2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: isHovered
+                                ? const Color(0xFFE53E3E).withValues(alpha: 0.45)
+                                : Colors.black.withValues(alpha: 0.08),
+                            blurRadius: isHovered ? 16 : 10,
+                            spreadRadius: isHovered ? 1 : 0,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            isHovered ? Icons.delete_forever_rounded : Icons.delete_outline_rounded,
+                            color: isHovered ? Colors.white : const Color(0xFFE53E3E),
+                            size: isHovered ? 22 : 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            isHovered ? 'Soltar para eliminar' : 'Arrastrar para eliminar',
+                            style: TextStyle(
+                              color: isHovered
+                                  ? Colors.white
+                                  : (isDark ? Colors.grey.shade200 : Colors.grey.shade800),
+                              fontWeight: isHovered ? FontWeight.bold : FontWeight.w600,
+                              fontSize: 12,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
-              );
-            },
+                  );
+                },
+              ),
+            ),
           ),
         ),
       ),
@@ -582,6 +791,7 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
     required Color colorHeader,
     required Tablero? tablero,
     required PermisosMiembro permisos,
+    List<String>? columnasList,
     double? alturaDisponible,
   }) {
     return DragTarget<Tarea>(
@@ -696,6 +906,7 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                   ),
                 )
                     : SingleChildScrollView(
+                  controller: _obtenerScrollControllerColumna(estadoNombre),
                   physics: const BouncingScrollPhysics(),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -711,7 +922,11 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                           _iniciarDrag();
                         },
                         onDragUpdate: (details) {
-                          _mananejarAutoScroll(details, MediaQuery.sizeOf(context).width);
+                          _mananejarAutoScroll(
+                            details,
+                            MediaQuery.sizeOf(context).width,
+                            MediaQuery.sizeOf(context).height,
+                          );
                         },
                         onDragCompleted: () {
                           _detenerDrag();
@@ -731,6 +946,8 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                               child: TaskCardWidget(
                                 tarea: tarea,
                                 tablero: tablero,
+                                columnasList: columnasList,
+                                permisos: permisos,
                               ),
                             ),
                           ),
@@ -740,6 +957,8 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                           child: TaskCardWidget(
                             tarea: tarea,
                             tablero: tablero,
+                            columnasList: columnasList,
+                            permisos: permisos,
                           ),
                         ),
                         child: GestureDetector(
@@ -760,6 +979,8 @@ class _KanbanBoardWidgetState extends State<KanbanBoardWidget> {
                           child: TaskCardWidget(
                             tarea: tarea,
                             tablero: tablero,
+                            columnasList: columnasList,
+                            permisos: permisos,
                           ),
                         ),
                       ),
@@ -1133,11 +1354,15 @@ class ColumnHeaderWidget extends StatelessWidget {
 class TaskCardWidget extends StatelessWidget {
   final Tarea tarea;
   final Tablero? tablero;
+  final List<String>? columnasList;
+  final PermisosMiembro? permisos;
 
   const TaskCardWidget({
     super.key,
     required this.tarea,
     this.tablero,
+    this.columnasList,
+    this.permisos,
   });
 
   @override
@@ -1216,34 +1441,152 @@ class TaskCardWidget extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // FILA 1: Chip de Prioridad E Ícono
+                      // FILA 1: Chip de Prioridad E Ícono de Movimiento Rápido
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: colorPrioridad.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: colorPrioridad.withOpacity(0.4), width: 1),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.flag_rounded, size: 12, color: colorPrioridad),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Prioridad $textoPrioridad',
-                                  style: TextStyle(
-                                    color: colorPrioridad,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: colorPrioridad.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: colorPrioridad.withOpacity(0.4), width: 1),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.flag_rounded, size: 11, color: colorPrioridad),
+                                  const SizedBox(width: 3),
+                                  Flexible(
+                                    child: Text(
+                                      'Prioridad $textoPrioridad',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: colorPrioridad,
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
-                          Icon(Icons.drag_indicator_rounded, color: isDark ? Colors.grey.shade500 : Colors.grey, size: 18),
+                          const SizedBox(width: 4),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // MENÚ RÁPIDO "MOVER A..." (COMPLETAMENTE ACCESIBLE EN 1 SOLO TOQUE)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: (isDark ? const Color(0xFF52ABEB) : const Color(0xFF0284C7)).withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: (isDark ? const Color(0xFF52ABEB) : const Color(0xFF0284C7)).withOpacity(0.4),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: PopupMenuButton<String>(
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  tooltip: 'Mover a otra columna (Acceso rápido)',
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.swap_horiz_rounded,
+                                        color: isDark ? const Color(0xFF52ABEB) : const Color(0xFF0284C7),
+                                        size: 13,
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        'Mover ▾',
+                                        style: TextStyle(
+                                          color: isDark ? const Color(0xFF52ABEB) : const Color(0xFF0284C7),
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  onSelected: (colDestino) async {
+                                    final currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+                                    final permisosUsuario = permisos ?? tablero?.obtenerPermisosDeUsuario(currentUid) ?? PermisosMiembro.todos;
+
+                                    if (!permisosUsuario.moverTareas) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('No tienes permiso para mover tareas en este tablero'),
+                                          backgroundColor: Colors.redAccent,
+                                        ),
+                                      );
+                                      return;
+                                    }
+
+                                    final colActual = tarea.estadoNombre.isNotEmpty ? tarea.estadoNombre : tarea.estado.value;
+                                    if (colActual != colDestino) {
+                                      try {
+                                        await FirestoreService().actualizarEstadoTarea(tarea.id, colDestino);
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Tarea "${tarea.titulo}" movida a "$colDestino"'),
+                                              duration: const Duration(seconds: 2),
+                                              backgroundColor: const Color(0xFF52ABEB),
+                                            ),
+                                          );
+                                        }
+                                      } catch (e) {
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text(MensajesError.desde(e, accion: 'mover la tarea'))),
+                                          );
+                                        }
+                                      }
+                                    }
+                                  },
+                                  itemBuilder: (context) {
+                                    final cols = (columnasList != null && columnasList!.isNotEmpty)
+                                        ? columnasList!
+                                        : (tablero?.columnas.isNotEmpty == true
+                                            ? tablero!.columnas
+                                            : const ['Pendiente', 'En progreso', 'Completada']);
+
+                                    final colActual = tarea.estadoNombre.isNotEmpty ? tarea.estadoNombre : tarea.estado.value;
+
+                                    return cols.map((col) {
+                                      final esActual = col == colActual;
+                                      return PopupMenuItem<String>(
+                                        value: col,
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              esActual ? Icons.check_circle_rounded : Icons.swap_horiz_rounded,
+                                              size: 16,
+                                              color: esActual ? const Color(0xFF63D0A1) : Colors.grey,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              col,
+                                              style: TextStyle(
+                                                fontWeight: esActual ? FontWeight.bold : FontWeight.normal,
+                                                color: esActual ? const Color(0xFF63D0A1) : null,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }).toList();
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(Icons.drag_indicator_rounded, color: isDark ? Colors.grey.shade500 : Colors.grey, size: 18),
+                            ],
+                          ),
                         ],
                       ),
                       const SizedBox(height: 8),

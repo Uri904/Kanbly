@@ -161,23 +161,29 @@ class _PantallaBorradoresPersonalesState extends State<PantallaBorradoresPersona
                 unselectedLabelStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13),
                 tabs: const [
                   Tab(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.sticky_note_2_rounded, size: 16),
-                        SizedBox(width: 6),
-                        Text('Notas Personales'),
-                      ],
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.sticky_note_2_rounded, size: 16),
+                          SizedBox(width: 6),
+                          Text('Notas Personales'),
+                        ],
+                      ),
                     ),
                   ),
                   Tab(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.pending_actions_rounded, size: 16),
-                        SizedBox(width: 6),
-                        Text('Borradores Tareas'),
-                      ],
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.pending_actions_rounded, size: 16),
+                          SizedBox(width: 6),
+                          Text('Borradores Tareas'),
+                        ],
+                      ),
                     ),
                   ),
                 ],

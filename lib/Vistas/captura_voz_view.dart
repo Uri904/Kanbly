@@ -101,6 +101,7 @@ class _CapturaVozViewState extends State<CapturaVozView> {
           }
 
           return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(24.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -313,32 +314,55 @@ class _CapturaVozViewState extends State<CapturaVozView> {
                         ),
                       ],
                     ),
-                  )
-                else
-                  // Botón "Procesar con IA"
-                  ElevatedButton.icon(
-                    onPressed: controller.transcription.trim().isEmpty
-                        ? null
-                        : () => _procesarConIa(controller),
-                    icon: const Icon(Icons.auto_awesome, color: Colors.white),
-                    label: const Text(
-                      'Procesar con IA',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: verdeTurquesa,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      elevation: 2,
+                  ),
+                const SizedBox(height: 24),
+              ],
+            ),
+          );
+        },
+      ),
+      bottomNavigationBar: Consumer<AsistenteIaController>(
+        builder: (context, controller, child) {
+          if (controller.isLoading) return const SizedBox.shrink();
+
+          return SafeArea(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: theme.cardColor,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton.icon(
+                  onPressed: controller.transcription.trim().isEmpty
+                      ? null
+                      : () => _procesarConIa(controller),
+                  icon: const Icon(Icons.auto_awesome, color: Colors.white),
+                  label: const Text(
+                    'Procesar con IA',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                   ),
-              ],
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: verdeTurquesa,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    elevation: 2,
+                  ),
+                ),
+              ),
             ),
           );
         },

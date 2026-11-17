@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:firebase_ai/firebase_ai.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' show ClientException;
 import '../modelo/tarea_borrador.dart';
@@ -52,6 +53,10 @@ abstract final class MensajesAsistenteIa {
   /// La API de Firebase AI Logic no está habilitada en el proyecto (403 / PERMISSION_DENIED).
   static const String apiNoHabilitada =
       'La API de Firebase AI Logic no está habilitada en tu proyecto.';
+
+  /// El token de autenticación o la clave API de Firebase es inválido o ha expirado.
+  static const String tokenInvalido =
+      'Sesión de usuario o Clave API de IA no válida. Cierra sesión e inicia nuevamente o verifica la API Key de Firebase.';
 
   /// Fallo de red o falta de conexión a Internet.
   static const String sinConexion =
@@ -120,6 +125,7 @@ enum _ClaseErrorIa {
   servicioSaturado,
   modeloNoDisponible,
   apiNoHabilitada,
+  tokenInvalido,
   sinConexion,
   respuestaInvalida,
   desconocido,
@@ -954,6 +960,14 @@ Reglas de conducta estrictas:
 
   /// Llamada real a Gemini mediante Firebase AI Logic.
   static Future<String?> _generarConFirebaseAi(SolicitudIa solicitud) async {
+    // Forzar refresco del token de autenticación de usuario de Firebase si la sesión caducó
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await user.getIdToken(true);
+      }
+    } catch (_) {}
+
     final generativeModel = FirebaseAI.googleAI().generativeModel(
       model: solicitud.nombreModelo,
       generationConfig: solicitud.configuracionGeneracion,
@@ -996,6 +1010,10 @@ Reglas de conducta estrictas:
     if (_contieneAlguno(texto, _marcadoresSinConexion)) {
       return _ClaseErrorIa.sinConexion;
     }
+    if (_contieneAlguno(texto, _marcadoresTokenInvalido) ||
+        _codigo401.hasMatch(texto)) {
+      return _ClaseErrorIa.tokenInvalido;
+    }
     if (_contieneAlguno(texto, _marcadoresApiNoHabilitada) ||
         _codigo403.hasMatch(texto)) {
       return _ClaseErrorIa.apiNoHabilitada;
@@ -1035,6 +1053,8 @@ Reglas de conducta estrictas:
         return MensajesAsistenteIa.modeloNoDisponible;
       case _ClaseErrorIa.apiNoHabilitada:
         return MensajesAsistenteIa.apiNoHabilitada;
+      case _ClaseErrorIa.tokenInvalido:
+        return MensajesAsistenteIa.tokenInvalido;
       case _ClaseErrorIa.sinConexion:
         return MensajesAsistenteIa.sinConexion;
       case _ClaseErrorIa.respuestaInvalida:
@@ -1045,9 +1065,25 @@ Reglas de conducta estrictas:
   }
 
   static final RegExp _codigo5xx = RegExp(r'\b5\d{2}\b');
+  static final RegExp _codigo401 = RegExp(r'\b401\b');
   static final RegExp _codigo403 = RegExp(r'\b403\b');
   static final RegExp _codigo404 = RegExp(r'\b404\b');
   static final RegExp _codigo429 = RegExp(r'\b429\b');
+
+  static const List<String> _marcadoresTokenInvalido = <String>[
+    'token no válido',
+    'token no valido',
+    'invalid token',
+    'invalid_token',
+    'api key not valid',
+    'api_key_invalid',
+    'invalid api key',
+    'unauthenticated',
+    'unauthorized',
+    'token expired',
+    'expired token',
+    'auth/invalid-token',
+  ];
 
   static const List<String> _marcadoresSinConexion = <String>[
     'socketexception',

@@ -530,6 +530,17 @@ void main() {
       expect(esperas, isEmpty);
     });
 
+    test('Un error de Token no válido o 401 se clasifica como tokenInvalido', () {
+      const errorToken = 'FirebaseAIException: API key not valid. Please pass a valid API key.';
+      const errorToken2 = 'INVALID_ARGUMENT: Token no válido';
+
+      final mensaje1 = AsistenteIaService.clasificarTextoErrorParaPruebas(errorToken);
+      final mensaje2 = AsistenteIaService.clasificarTextoErrorParaPruebas(errorToken2);
+
+      expect(mensaje1, equals(MensajesAsistenteIa.tokenInvalido));
+      expect(mensaje2, equals(MensajesAsistenteIa.tokenInvalido));
+    });
+
     test('Un error 403 de API no habilitada no se reintenta', () async {
       final generador = GeneradorIaFalso(<Object?>[
         ServiceApiNotEnabled('projects/demo-kanbly'),

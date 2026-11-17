@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'formulario_tablero.dart';
 import 'encabezado.dart';
@@ -22,8 +23,29 @@ class _MisTablerosState extends State<MisTableros> {
   final FirestoreService _firestoreService = FirestoreService();
   List<Tablero> _tableros = [];
   bool _cargando = true;
+  bool _estaSinConexion = false;
   // Control de la pestaña activa: 0 = General, 1 = Individual, 2 = Equipo
   int _tabActiva = 0;
+
+  Future<void> _verificarConectividad() async {
+    try {
+      final result = await InternetAddress.lookup('google.com')
+          .timeout(const Duration(seconds: 3));
+      final online = result.isNotEmpty && result[0].rawAddress.isNotEmpty;
+      if (mounted && _estaSinConexion != !online) {
+        setState(() {
+          _estaSinConexion = !online;
+        });
+      }
+    } catch (_) {
+      if (mounted && !_estaSinConexion) {
+        setState(() {
+          _estaSinConexion = true;
+        });
+      }
+    }
+  }
+
   Future<void> _cargarTableros() async {
 
     try {
@@ -63,6 +85,7 @@ class _MisTablerosState extends State<MisTableros> {
     super.initState();
 
     _cargarTableros();
+    _verificarConectividad();
   }
   @override
   Widget build(BuildContext context) {
@@ -91,31 +114,33 @@ class _MisTablerosState extends State<MisTableros> {
         children: [
           SizedBox(height: horizontal ? 4 : 8),
 
-          // --- INDICADOR MODO OFFLINE Y SINCRONIZACIÓN AUTOMÁTICA ---
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
-              decoration: BoxDecoration(
-                color: const Color(0xFF63D0A1).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFF63D0A1).withOpacity(0.3)),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.cloud_sync_rounded, size: 16, color: Color(0xFF63B09C)),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Modo sin conexión listo: Crea tableros y tareas localmente. Se sincronizarán a la nube automáticamente.',
-                      style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w500, color: Color(0xFF4A5568)),
+          // --- INDICADOR MODO OFFLINE Y SINCRONIZACIÓN AUTOMÁTICA (SOLO MOSTRAR SI REALMENTE ESTÁ OFFLINE) ---
+          if (_estaSinConexion) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFED8936).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFED8936).withValues(alpha: 0.4)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.wifi_off_rounded, size: 16, color: Color(0xFFED8936)),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Modo sin conexión activo: Los cambios se guardarán localmente y se sincronizarán al reconectarte.',
+                        style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFFED8936)),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-          SizedBox(height: horizontal ? 4 : 8),
+            SizedBox(height: horizontal ? 4 : 8),
+          ],
 
           // --- BARRA DE PESTAÑAS ---
           Padding(
