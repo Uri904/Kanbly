@@ -35,6 +35,7 @@ dependencies:
   firebase_core:
   firebase_auth:
   cloud_firestore:
+  firebase_app_check: ^0.4.8
   firebase_ai: ^3.11.0
   speech_to_text: ^7.5.0
   permission_handler: ^11.3.1

@@ -541,6 +541,20 @@ void main() {
       expect(mensaje2, equals(MensajesAsistenteIa.tokenInvalido));
     });
 
+    test('Un error de Firebase App Check token es inválido o Too Many Attempts se clasifica como appCheckInvalido', () {
+      const errorAppCheck = 'Firebase App Check token is invalid.';
+      const errorAppCheck2 = 'FirebaseException: [firebase_ai/app-check-failed] Firebase App Check token is invalid.';
+      const errorAppCheck3 = '[firebase_app_check/unknown] Too many attempts.';
+
+      final mensaje1 = AsistenteIaService.clasificarTextoErrorParaPruebas(errorAppCheck);
+      final mensaje2 = AsistenteIaService.clasificarTextoErrorParaPruebas(errorAppCheck2);
+      final mensaje3 = AsistenteIaService.clasificarTextoErrorParaPruebas(errorAppCheck3);
+
+      expect(mensaje1, equals(MensajesAsistenteIa.appCheckInvalido));
+      expect(mensaje2, equals(MensajesAsistenteIa.appCheckInvalido));
+      expect(mensaje3, equals(MensajesAsistenteIa.appCheckInvalido));
+    });
+
     test('Un error 403 de API no habilitada no se reintenta', () async {
       final generador = GeneradorIaFalso(<Object?>[
         ServiceApiNotEnabled('projects/demo-kanbly'),

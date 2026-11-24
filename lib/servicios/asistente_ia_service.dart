@@ -58,6 +58,10 @@ abstract final class MensajesAsistenteIa {
   static const String tokenInvalido =
       'Sesión de usuario o Clave API de IA no válida. Cierra sesión e inicia nuevamente o verifica la API Key de Firebase.';
 
+  /// El token de Firebase App Check es inválido o se superó el límite de intentos.
+  static const String appCheckInvalido =
+      'Error de seguridad de Firebase App Check. En Firebase Console -> App Check -> APIs, en la fila de Firebase AI Logic haz clic en los tres puntos (⋮) a la derecha y selecciona "Desactivar la aplicación" (Unenforce).';
+
   /// Fallo de red o falta de conexión a Internet.
   static const String sinConexion =
       'Sin conexión a Internet. Revisa tu red e intenta de nuevo.';
@@ -126,6 +130,7 @@ enum _ClaseErrorIa {
   modeloNoDisponible,
   apiNoHabilitada,
   tokenInvalido,
+  appCheckInvalido,
   sinConexion,
   respuestaInvalida,
   desconocido,
@@ -1010,6 +1015,9 @@ Reglas de conducta estrictas:
     if (_contieneAlguno(texto, _marcadoresSinConexion)) {
       return _ClaseErrorIa.sinConexion;
     }
+    if (_contieneAlguno(texto, _marcadoresAppCheck)) {
+      return _ClaseErrorIa.appCheckInvalido;
+    }
     if (_contieneAlguno(texto, _marcadoresTokenInvalido) ||
         _codigo401.hasMatch(texto)) {
       return _ClaseErrorIa.tokenInvalido;
@@ -1055,6 +1063,8 @@ Reglas de conducta estrictas:
         return MensajesAsistenteIa.apiNoHabilitada;
       case _ClaseErrorIa.tokenInvalido:
         return MensajesAsistenteIa.tokenInvalido;
+      case _ClaseErrorIa.appCheckInvalido:
+        return MensajesAsistenteIa.appCheckInvalido;
       case _ClaseErrorIa.sinConexion:
         return MensajesAsistenteIa.sinConexion;
       case _ClaseErrorIa.respuestaInvalida:
@@ -1069,6 +1079,17 @@ Reglas de conducta estrictas:
   static final RegExp _codigo403 = RegExp(r'\b403\b');
   static final RegExp _codigo404 = RegExp(r'\b404\b');
   static final RegExp _codigo429 = RegExp(r'\b429\b');
+
+  static const List<String> _marcadoresAppCheck = <String>[
+    'app check',
+    'appcheck',
+    'app-check',
+    'app_check',
+    'firebase_app_check',
+    'app-check-failed',
+    'too many attempts',
+    'firebase app check token is invalid',
+  ];
 
   static const List<String> _marcadoresTokenInvalido = <String>[
     'token no válido',
